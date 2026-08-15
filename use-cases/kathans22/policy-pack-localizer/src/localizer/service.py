@@ -57,6 +57,58 @@ def verify(country_code: str, manifest: dict | None = None, out_dir: Path = pack
     return packs.verify_pack(markdown_text, manifest, country["language"])
 
 
+def integrity_report(
+    country_codes: list[str], manifest: dict | None = None, out_dir: Path = packs.OUT_DIR
+) -> dict:
+    """Build the integrity report: core identity per language, proved from
+    every generated pack's actual exported core, not assumed from the lock.
+
+    For each language present in `country_codes`, `expected` is the locked
+    core_hash (corelock.load_lock) and `identical` is True only if every
+    pack in that language, re-hashed from its own export, matches it —
+    the same mechanism packs.verify_pack uses per pack, aggregated here
+    across the whole run.
+    """
+    manifest = manifest if manifest is not None else config_module.load_manifest()
+    core_version = manifest["core_version"]
+    markdown_filename = next(filename for fmt, filename in packs._EXPORT_FILES if fmt == "markdown")
+
+    languages: dict[str, int] = {}
+    core_identity: dict[str, dict] = {}
+    all_pass = True
+
+    for code in country_codes:
+        country = config_module.load_country(config_module.COUNTRIES_DIR / f"{code}.yaml")
+        language = country["language"]
+        languages[language] = languages.get(language, 0) + 1
+
+        markdown_text = (out_dir / code / markdown_filename).read_text(encoding="utf-8")
+        verification = packs.verify_pack(markdown_text, manifest, language)
+        all_pass = all_pass and verification["passed"]
+
+        actual_hash = corelock.lock(
+            verification["exported_core_sections"], core_version, language
+        )["core_hash"]
+        entry = core_identity.setdefault(
+            language,
+            {"expected": corelock.load_lock(core_version, language)["core_hash"], "packs": [], "identical": True},
+        )
+        entry["packs"].append(code)
+        if actual_hash != entry["expected"]:
+            entry["identical"] = False
+
+    for entry in core_identity.values():
+        entry["packs"].sort()
+
+    return {
+        "core_version": core_version,
+        "packs": len(country_codes),
+        "languages": languages,
+        "core_identity": core_identity,
+        "all_packs_pass": all_pass,
+    }
+
+
 async def run(
     country_codes: list[str],
     *,
