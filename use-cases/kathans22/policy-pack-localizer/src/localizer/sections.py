@@ -27,3 +27,22 @@ def parse_sections(text: str) -> list[dict]:
 def load_sections(path: Path) -> list[dict]:
     text = path.read_text(encoding="utf-8")
     return parse_sections(text)
+
+
+def assert_matches_manifest(sections: list[dict], manifest: dict) -> None:
+    declared = manifest["sections"]
+    if len(sections) != len(declared):
+        raise ValueError(
+            f"parsed {len(sections)} sections but manifest declares {len(declared)}"
+        )
+    for parsed, expected in zip(sections, declared):
+        if parsed["number"] != expected["number"]:
+            raise ValueError(
+                f"section order mismatch: parsed number {parsed['number']}, "
+                f"manifest expects {expected['number']}"
+            )
+        if parsed["heading"] != expected["heading"]:
+            raise ValueError(
+                f"section {parsed['number']} heading {parsed['heading']!r} "
+                f"does not match manifest heading {expected['heading']!r}"
+            )
