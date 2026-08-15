@@ -1,1 +1,82 @@
-"""Top-level orchestration entry points used by the API layer."""
+"""Top-level orchestration entry points used by the API layer.
+
+The single place lock/generate/verify are called from. The CLI (__main__.py)
+and any future FastAPI route both call these functions; neither reimplements
+the sequence itself.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from . import config as config_module
+from . import corelock
+from . import packs
+from . import sections as sections_module
+from .ledger import Ledger, apply_limit
+
+
+def lock_core(manifest: dict | None = None, language: str | None = None) -> dict:
+    """Lock policy-master.md's core sections for one language. 0 ops — arithmetic."""
+    manifest = manifest if manifest is not None else config_module.load_manifest()
+    language = language or manifest["source_language"]
+
+    master_sections = sections_module.parse_sections(
+        packs.POLICY_MASTER_PATH.read_text(encoding="utf-8")
+    )
+    sections_module.assert_matches_manifest(master_sections, manifest)
+
+    core_numbers = {s["number"] for s in manifest["sections"] if s["role"] == "core"}
+    core_sections = [s for s in master_sections if s["number"] in core_numbers]
+
+    lock_data = corelock.lock(core_sections, manifest["core_version"], language)
+    corelock.save_lock(lock_data)
+    return lock_data
+
+
+async def generate(
+    country_code: str,
+    *,
+    ledger: Ledger,
+    manifest: dict | None = None,
+    out_dir: Path = packs.OUT_DIR,
+) -> dict:
+    """Generate one country's pack. Thin wrapper over packs.generate_pack —
+    the entry point everything else calls, so nothing reimplements it."""
+    manifest = manifest if manifest is not None else config_module.load_manifest()
+    return await packs.generate_pack(country_code, ledger=ledger, manifest=manifest, out_dir=out_dir)
+
+
+def verify(country_code: str, manifest: dict | None = None, out_dir: Path = packs.OUT_DIR) -> dict:
+    """Re-verify an already-generated pack on disk against the locked core."""
+    manifest = manifest if manifest is not None else config_module.load_manifest()
+    country = config_module.load_country(config_module.COUNTRIES_DIR / f"{country_code}.yaml")
+    markdown_filename = next(filename for fmt, filename in packs._EXPORT_FILES if fmt == "markdown")
+    pack_path = out_dir / country_code / markdown_filename
+    markdown_text = pack_path.read_text(encoding="utf-8")
+    return packs.verify_pack(markdown_text, manifest, country["language"])
+
+
+async def run(
+    country_codes: list[str],
+    *,
+    limit: int | None = None,
+    out_dir: Path = packs.OUT_DIR,
+) -> dict:
+    """Lock the core, then generate a pack per country (respecting --limit).
+
+    Loads the persisted ledger so a resumed run does not double-count, and
+    saves it back at the end. This is what the CLI's `run` command calls.
+    """
+    ledger = Ledger.load()
+    manifest = config_module.load_manifest()
+
+    lock_core(manifest=manifest)
+
+    codes = apply_limit(country_codes, limit)
+    results = {}
+    for code in codes:
+        results[code] = await generate(code, ledger=ledger, manifest=manifest, out_dir=out_dir)
+
+    ledger.save()
+    return {"results": results, "ledger": ledger}
