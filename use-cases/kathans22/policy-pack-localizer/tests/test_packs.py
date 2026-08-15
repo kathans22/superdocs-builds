@@ -5,6 +5,7 @@ anything that still fails verification."""
 from __future__ import annotations
 
 import asyncio
+import base64
 import math
 
 from localizer import config as config_module
@@ -117,6 +118,80 @@ class _MutatingFakeClient:
 
 async def _fake_downloader(url: str) -> bytes:
     return b"fake docx bytes"
+
+
+class _MultiSessionFakeClient:
+    """A fake client that tracks a separate document per session_id, so it
+    can play both roles a multi-language pack run needs from one instance:
+    translate.py's "translate-{language}" sessions (core translation) and
+    packs.py's "pack-{code}" sessions (annex localisation), exactly as one
+    real SuperDocs account would serve both.
+    """
+
+    def __init__(self, manifest: dict, countries: dict[str, dict],
+                 docx_url: str = "https://downloads.example/policy-pack.docx"):
+        self.manifest = manifest
+        self.countries = countries  # country code -> country dict
+        self.docx_url = docx_url
+        self.calls: list[tuple[str, dict]] = []
+        self.sessions: dict[str, dict] = {}
+        master_sections = sections_module.parse_sections(packs.POLICY_MASTER_PATH.read_text(encoding="utf-8"))
+        self._master_body = {s["number"]: s["body"] for s in master_sections}
+        self._master_heading = {s["number"]: s["heading"] for s in master_sections}
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc_info):
+        return None
+
+    async def upload(self, **kwargs):
+        self.calls.append(("upload", kwargs))
+        session_id = kwargs["session_id"]
+        text = base64.b64decode(kwargs["file_base64"]).decode("utf-8")
+        parsed = sections_module.parse_sections(text)
+        self.sessions[session_id] = {
+            "body": {s["number"]: s["body"] for s in parsed},
+            "heading": {s["number"]: s["heading"] for s in parsed},
+        }
+        return {"session_id": session_id}
+
+    async def chat(self, **kwargs):
+        self.calls.append(("chat", kwargs))
+        session_id = kwargs["session_id"]
+        doc = self.sessions[session_id]
+        numbers = sorted({int(m) for m in packs._SECTION_MENTION_RE.findall(kwargs["message"])})
+
+        if session_id.startswith("translate-"):
+            language = session_id[len("translate-"):]
+            for number in numbers:
+                doc["body"][number] = f"[{language}] {self._master_body[number]}"
+                doc["heading"][number] = f"[{language}] {self._master_heading[number]}"
+        else:
+            code = session_id[len("pack-"):].upper()
+            country = self.countries[code]
+            for number in numbers:
+                slot = next(s["slot"] for s in self.manifest["sections"] if s["number"] == number)
+                doc["body"][number] = packs._SLOT_RENDERERS[slot](country)
+
+        return {
+            "response": f"Updated {len(numbers)} section(s).",
+            "usage": {"was_billable": True, "ops_charged": 1},
+        }
+
+    async def export(self, **kwargs):
+        self.calls.append(("export", kwargs))
+        if kwargs.get("format") == "docx":
+            return {"download_url": self.docx_url}
+        doc = self.sessions[kwargs["session_id"]]
+        lines = []
+        for section in self.manifest["sections"]:
+            number = section["number"]
+            lines.append(f"## {number} {doc['heading'][number]}")
+            lines.append("")
+            lines.append(doc["body"][number])
+            lines.append("")
+        return {"text": "\n".join(lines)}
 
 
 def test_build_instruction_batches_every_annex_section_into_one_message():
@@ -369,6 +444,37 @@ def test_verify_pack_fails_when_a_core_section_diverges(tmp_path, monkeypatch):
     assert result["passed"] is False
     assert result["core"]["passed"] is False
     assert 1 in result["core"]["diverged_sections"]
+
+
+def test_generate_pack_builds_a_non_english_country_from_the_locked_translated_core(tmp_path, monkeypatch):
+    manifest = config_module.load_manifest()
+    fr = config_module.load_country(config_module.COUNTRIES_DIR / "FR.yaml")
+    monkeypatch.setattr(corelock, "STATE_DIR", tmp_path / "state")
+    ledger = Ledger()
+    fake_client = _MultiSessionFakeClient(manifest, {"FR": fr})
+
+    result = asyncio.run(
+        packs.generate_pack(
+            "FR", ledger=ledger, manifest=manifest, country=fr, out_dir=tmp_path / "out",
+            client_factory=lambda: fake_client, downloader=_fake_downloader,
+        )
+    )
+
+    assert result["skipped"] is False
+    markdown = (tmp_path / "out" / "FR" / "policy-pack.md").read_text(encoding="utf-8")
+    core_sections = packs.extract_core_sections(markdown, manifest)
+    for section in core_sections:
+        assert section["body"].startswith("[fr] ")  # translated, not the English master text
+
+    verification = packs.verify_pack(markdown, manifest, "fr")
+    assert verification["passed"] is True
+
+    # Translation happened exactly once, in its own session, before the pack session:
+    translate_chats = [
+        kwargs for name, kwargs in fake_client.calls
+        if name == "chat" and kwargs["session_id"] == "translate-fr"
+    ]
+    assert len(translate_chats) == 1
 
 
 def test_generate_pack_quarantines_a_pack_whose_annex_never_lands(tmp_path, monkeypatch):

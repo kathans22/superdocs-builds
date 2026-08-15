@@ -146,6 +146,11 @@ async def derive_core(
 
     core_sections = _extract_core_sections(markdown_text, manifest)
     lock_data = corelock.lock(core_sections, core_version, language)
+    # corelock.lock() stores only hashes. packs.py needs the actual verbatim
+    # translated text to insert into a pack without ever re-translating, so
+    # the parsed section dicts (number/heading/body) ride along in the same
+    # lock file, under a key corelock.verify() itself never reads.
+    lock_data["sections"] = core_sections
     corelock.save_lock(lock_data)
 
     # Marks this content_key as charged for future idempotency checks, without

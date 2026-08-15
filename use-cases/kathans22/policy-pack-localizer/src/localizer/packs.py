@@ -13,6 +13,7 @@ import httpx2
 from . import config as config_module
 from . import corelock
 from . import sections as sections_module
+from . import translate
 from .ledger import Ledger, ops_from_response
 from .mcp_client import SuperDocsClient, SuperDocsClientError
 
@@ -439,6 +440,57 @@ async def _localise_annex(
     return await _export_markdown_text(client, session_id, ledger, country_code, "final")
 
 
+def _translated_core_sections(manifest: dict, language: str) -> list[dict]:
+    """The verbatim translated core sections locked for `language`.
+
+    Reads translate.derive_core's persisted lock — never calls SuperDocs.
+    """
+    lock_data = corelock.load_lock(manifest["core_version"], language)
+    sections = lock_data.get("sections")
+    if not sections:
+        raise PackIntegrityError(
+            f"The locked core for language {language!r} has no verbatim section text "
+            "saved, only hashes. Fix: this lock predates translate.derive_core "
+            "persisting 'sections' — re-derive it."
+        )
+    return sections
+
+
+def _assemble_upload_document(manifest: dict, country: dict) -> str:
+    """Build the document text to upload for one country's pack.
+
+    A source-language country uploads policy-master.md unchanged, exactly as
+    before. Every other country uploads the master's structure with its core
+    sections replaced, verbatim, by that language's locked translation
+    (translate.derive_core) — never regenerated, never re-translated, never
+    passed through a model here. Annex sections are left as the master's
+    placeholders in both cases; annex localisation happens afterward via the
+    batched chat edit, identically for every country regardless of language.
+    """
+    if country["language"] == manifest["source_language"]:
+        return POLICY_MASTER_PATH.read_text(encoding="utf-8")
+
+    master_sections = sections_module.parse_sections(POLICY_MASTER_PATH.read_text(encoding="utf-8"))
+    master_body_by_number = {s["number"]: s["body"] for s in master_sections}
+    core_by_number = {
+        s["number"]: s for s in _translated_core_sections(manifest, country["language"])
+    }
+
+    lines = []
+    for section in manifest["sections"]:
+        number = section["number"]
+        if section["role"] == "core":
+            translated = core_by_number[number]
+            heading, body = translated["heading"], translated["body"]
+        else:
+            heading, body = section["heading"], master_body_by_number[number]
+        lines.append(f"## {number} {heading}")
+        lines.append("")
+        lines.append(body)
+        lines.append("")
+    return "\n".join(lines)
+
+
 async def generate_pack(
     country_code: str,
     *,
@@ -484,8 +536,17 @@ async def generate_pack(
             "skipped": True,
         }
 
+    if country["language"] != manifest["source_language"]:
+        # Cached by (core_version, language) inside derive_core itself: the
+        # first country in a language pays the one translation operation,
+        # every other country sharing that language pays nothing.
+        await translate.derive_core(
+            country["language"], ledger=ledger, manifest=manifest, client_factory=client_factory
+        )
+
     session_id = f"pack-{country_code.lower()}"
-    file_base64 = base64.b64encode(POLICY_MASTER_PATH.read_bytes()).decode("ascii")
+    document_text = _assemble_upload_document(manifest, country)
+    file_base64 = base64.b64encode(document_text.encode("utf-8")).decode("ascii")
     instruction = build_instruction(manifest, country)  # full instruction, kept for the return value
 
     async with client_factory() as client:
