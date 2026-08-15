@@ -236,3 +236,111 @@ def _first_text(content) -> str | None:
         if text is not None:
             return text
     return None
+
+
+_REQUIRED_CHANGE_FIELDS = ("change_id", "operation", "chunk_id", "old_html", "new_html")
+
+
+def parse_proposed_changes(response) -> list[dict]:
+    """Extract the list of proposed changes from a SuperDocs chat/get_job response.
+
+    The single place this codebase unwraps a proposed-change payload. SuperDocs
+    hands the same underlying data back in two shapes, and a caller should never
+    have to know which one they got:
+
+    - Already-an-object: `metadata.pending_changes` (or `pending_changes`, or
+      `document_changes.pending_changes`) is already a list of change dicts.
+      No parsing needed — this is the final result.
+    - Double-encoded: an `intermediate_responses` entry with
+      `type == "proposed_change_batch"` whose `content` field is a JSON-encoded
+      STRING, not an object. It must be parsed once (a second parse relative to
+      the outer response, which the MCP client already parsed) to reach
+      `{"type", "batch_id", "batch_total", "changes": [...]}`. A bare JSON
+      string or an already-parsed batch dict, passed directly, are also accepted.
+
+    Raises SuperDocsClientError — never returns None — when the payload is
+    neither shape, or when a change is missing a required field, rather than
+    handing back a change whose fields silently read as undefined.
+    """
+    changes = _locate_changes(response)
+    for change in changes:
+        missing = [field for field in _REQUIRED_CHANGE_FIELDS if field not in change]
+        if missing:
+            raise SuperDocsClientError(
+                f"Proposed change {change.get('change_id', '<unknown>')!r} is missing "
+                f"required field(s) {missing}. Fix: this is not a valid SuperDocs "
+                "proposed-change payload — check the response was passed to "
+                "parse_proposed_changes unmodified, not partially unwrapped first."
+            )
+    return changes
+
+
+def _locate_changes(response) -> list[dict]:
+    if isinstance(response, str):
+        return _changes_from_batch(_parse_json_string(response, context="response"))
+
+    if not isinstance(response, dict):
+        raise SuperDocsClientError(
+            "parse_proposed_changes expected a dict or a JSON-encoded string, got "
+            f"{type(response).__name__}. Fix: pass the raw chat/get_job response, or "
+            "an intermediate_responses[].content string, unmodified."
+        )
+
+    if isinstance(response.get("changes"), list):
+        return response["changes"]
+
+    metadata = response.get("metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    document_changes = response.get("document_changes")
+    document_changes = document_changes if isinstance(document_changes, dict) else {}
+
+    for pending in (
+        response.get("pending_changes"),
+        metadata.get("pending_changes"),
+        document_changes.get("pending_changes"),
+    ):
+        if isinstance(pending, list) and pending:
+            return pending
+
+    intermediate = response.get("intermediate_responses") or metadata.get("intermediate_responses")
+    if isinstance(intermediate, list):
+        for entry in intermediate:
+            if isinstance(entry, dict) and entry.get("type") == "proposed_change_batch":
+                content = entry.get("content")
+                if isinstance(content, str):
+                    return _changes_from_batch(
+                        _parse_json_string(content, context="intermediate_responses[].content")
+                    )
+                if isinstance(content, dict):
+                    return _changes_from_batch(content)
+
+    raise SuperDocsClientError(
+        "No proposed changes found in this response. Fix: pass the response from a "
+        "chat/get_job call made with approval_mode='ask_every_time' while the job is "
+        "awaiting_approval — look for metadata.pending_changes or an "
+        "intermediate_responses entry of type 'proposed_change_batch'."
+    )
+
+
+def _parse_json_string(text: str, context: str) -> dict:
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise SuperDocsClientError(
+            f"Could not parse {context} as JSON: {exc}. Fix: this field is documented "
+            "as a JSON-encoded string — if SuperDocs changed that, this helper needs updating."
+        ) from exc
+
+
+def _changes_from_batch(batch: dict) -> list[dict]:
+    if not isinstance(batch, dict) or "changes" not in batch:
+        raise SuperDocsClientError(
+            f"Parsed proposed-change payload has no 'changes' field: {batch!r}. Fix: "
+            "this is not the expected {'type', 'batch_id', 'batch_total', 'changes'} shape."
+        )
+    changes = batch["changes"]
+    if not isinstance(changes, list):
+        raise SuperDocsClientError(
+            f"Proposed-change payload's 'changes' field is not a list: {type(changes).__name__}."
+        )
+    return changes
