@@ -130,6 +130,44 @@ class SuperDocsClient:
             arguments["filename"] = filename
         return await self._call_tool("export_document", arguments)
 
+    async def chat(
+        self,
+        message: str,
+        session_id: str,
+        document_html: str | None = None,
+        approval_mode: str | None = None,
+        response_mode: str | None = None,
+        **extra,
+    ) -> dict:
+        """Send a synchronous chat instruction to edit, draft, or restructure a document."""
+        arguments: dict = {"message": message, "session_id": session_id, **extra}
+        if document_html is not None:
+            arguments["document_html"] = document_html
+        if approval_mode is not None:
+            arguments["approval_mode"] = approval_mode
+        if response_mode is not None:
+            arguments["response_mode"] = response_mode
+        return await self._call_tool("chat", arguments)
+
+    async def approve(
+        self,
+        session_id: str,
+        job_id: str,
+        approved: bool,
+        change_id: str | None = None,
+        feedback: str | None = None,
+        changes: list[dict] | None = None,
+    ) -> dict:
+        """Approve or deny AI-proposed changes from a chat_async job, one-by-one or in batch."""
+        arguments: dict = {"session_id": session_id, "job_id": job_id, "approved": approved}
+        if change_id is not None:
+            arguments["change_id"] = change_id
+        if feedback is not None:
+            arguments["feedback"] = feedback
+        if changes is not None:
+            arguments["changes"] = changes
+        return await self._call_tool("approve_change", arguments)
+
 
 def _first_text(content) -> str | None:
     for block in content or []:
