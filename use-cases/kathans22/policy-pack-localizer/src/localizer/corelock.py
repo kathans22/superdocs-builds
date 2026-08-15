@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import unicodedata
+from pathlib import Path
+
+STATE_DIR = Path(__file__).resolve().parents[2] / "state"
 
 # Curly/smart quote variants -> straight ASCII equivalents.
 _QUOTE_MAP = {
@@ -103,3 +107,21 @@ def lock(sections: list[dict], core_version: int, language: str) -> dict:
         "section_hashes": section_hashes,
         "core_hash": core_hash,
     }
+
+
+def _lock_path(core_version: int, language: str) -> Path:
+    return STATE_DIR / f"core-lock-v{core_version}-{language}.json"
+
+
+def save_lock(lock_data: dict) -> Path:
+    """Write a lock dict to state/core-lock-v{version}-{lang}.json."""
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    path = _lock_path(lock_data["core_version"], lock_data["language"])
+    path.write_text(json.dumps(lock_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def load_lock(core_version: int, language: str) -> dict:
+    """Read back the lock file for a given core_version and language."""
+    path = _lock_path(core_version, language)
+    return json.loads(path.read_text(encoding="utf-8"))
