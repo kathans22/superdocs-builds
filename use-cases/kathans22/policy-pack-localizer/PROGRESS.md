@@ -233,3 +233,61 @@ would work and only verification remained to prove. It didn't — the batching a
 itself was wrong, discovered only by running it live rather than trusting the design. Fixed
 forward per CLAUDE.md's own commit protocol, with a full bug report filed
 (`evidence/superdocs-batch-limit-report.md`) rather than silently working around it.
+
+## Phase 3 continued — service layer and CLI (Prompt 13)
+
+`service.py` is now the single entry point both the CLI and any future FastAPI route call —
+neither reimplements lock/generate/verify:
+
+- `lock_core()` — locks `policy-master.md`'s core sections for one language. 0 ops.
+- `generate(country_code, ...)` — thin wrapper over `packs.generate_pack`.
+- `verify(country_code, ...)` — re-verifies an already-generated pack on disk against the lock,
+  without regenerating it.
+- `run(country_codes, *, limit=None, ...)` — loads the persisted ledger, locks the core, generates
+  a pack per country (respecting `--limit`), saves the ledger. What the CLI's `run` command calls.
+
+`python -m localizer run --countries IN [--limit N]` (`src/localizer/__main__.py`) is a thin
+argparse wrapper over `service.run`; it prints per-country OK/SKIPPED and the ledger report.
+
+**Run it clean, then run it again — real result**, real `out/` and `state/` cleared first
+(including a leftover `out/_quarantine/IN/` from an earlier offline test that had wrongly
+landed in the real project directory — removed):
+
+First run (via live SuperDocs calls, since this sandbox has no `SUPERDOCS_API_KEY` wired to
+its own process — see Prompt 10/12 for why; the CLI itself needs no such workaround with a
+real key) reproduced the same partial-batch behaviour documented in
+`evidence/superdocs-batch-limit-report.md`: the `[6, 7]` batch landed only section 7; a
+`[6]`-alone retry failed once (free) then succeeded; the `[8, 9]` batch landed cleanly. Real
+cost for this run: **3 ops**, not the idealised 2 — CLAUDE.md's "2 ops" is what a clean batch
+run costs; a run that needs one retry costs more, and the ledger records that honestly rather
+than reporting an assumed constant. `verify_pack` passed: core hash matched the lock exactly,
+zero unlocalised annex sections (see note below on why section 9's retained placeholder
+sentence didn't false-positive this check).
+
+Second run, the actual command, no code path touching the network at all:
+```
+$ python -m localizer run --countries IN
+[IN] SKIPPED
+
+...
+[pack]      IN                                           0 ops
+[pack]      IN                                 SKIPPED (0 ops)
+                                                       -------
+total                                                    3 ops
+```
+Total stayed at 3 — the second run added exactly one new SKIPPED ledger line and zero
+operations. Also confirmed `--countries IN,KE --limit 1` processes only `IN`; `KE` is never
+attempted, not even skipped-and-logged — `apply_limit` slices the country list before any
+country is touched.
+
+**Observation, not a bug:** section 9's original body has its two sentences joined by a
+single `\n` in `policy-master.md`, but SuperDocs' HTML→markdown export renders the `<br/>`
+that single `\n` becomes on upload as a full paragraph break (`\n\n`) on export — even when
+new content is appended after the original placeholder sentence rather than replacing it
+(observed live), the exact placeholder substring no longer matches verbatim, so
+`_sections_landed`/`verify_pack` correctly does not flag it as still-unlocalised. This is
+fortunate rather than by design; a future SuperDocs export change that preserved single `\n`
+literally could reintroduce a false "not landed" retry loop or, worse, a false-pass on a
+section that only had content appended around an intact placeholder. Worth hardening later
+(e.g. checking the placeholder no longer appears as the section's *entire* content, not just
+checking it as a substring) — not done now, out of this prompt's scope.
