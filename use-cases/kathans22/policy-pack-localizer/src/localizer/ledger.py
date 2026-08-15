@@ -38,10 +38,34 @@ class Ledger:
         subject: str,
         chat_calls: int,
         wall_time: float,
+        content_key: str | None = None,
+        output_exists: bool = True,
     ) -> LedgerEntry:
-        entry = LedgerEntry(step=step, subject=subject, operations=chat_calls, wall_time=wall_time)
+        """Record a step, or skip it if already charged and its output still exists.
+
+        Idempotency guard: when `content_key` was already charged in a prior
+        run (see `already_charged`) and `output_exists` is True — the caller
+        confirms the previous output is still on disk — the step is recorded
+        as SKIPPED with 0 operations rather than billed again.
+        """
+        if content_key is not None and output_exists and self.already_charged(content_key):
+            entry = LedgerEntry(
+                step=step, subject=subject, operations=0, wall_time=wall_time,
+                status="SKIPPED", content_key=content_key,
+            )
+        else:
+            entry = LedgerEntry(
+                step=step, subject=subject, operations=chat_calls, wall_time=wall_time,
+                status="CHARGED", content_key=content_key,
+            )
         self.entries.append(entry)
         return entry
+
+    def already_charged(self, content_key: str) -> bool:
+        """True if `content_key` was already billed (status CHARGED) in this ledger."""
+        return any(
+            e.content_key == content_key and e.status == "CHARGED" for e in self.entries
+        )
 
     @property
     def total_operations(self) -> int:
