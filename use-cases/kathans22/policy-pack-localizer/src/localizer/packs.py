@@ -7,6 +7,8 @@ import re
 import time
 from pathlib import Path
 
+import httpx2
+
 from . import config as config_module
 from .ledger import Ledger, ops_from_response
 from .mcp_client import SuperDocsClient, SuperDocsClientError, parse_proposed_changes
@@ -103,13 +105,57 @@ def assert_no_core_sections_named(instruction: str, manifest: dict) -> None:
         )
 
 
+_TEXT_EXPORT_FORMATS = {"markdown", "html", "txt"}
+_TEXT_EXPORT_KEYS = ("text", "markdown", "content")
+_EXPORT_FILES = (("markdown", "policy-pack.md"), ("docx", "policy-pack.docx"))
+
+
+async def _default_downloader(url: str) -> bytes:
+    async with httpx2.AsyncClient() as http:
+        response = await http.get(url)
+        response.raise_for_status()
+        return response.content
+
+
+async def _write_export(
+    export_response: dict, dest_path: Path, format: str, downloader=_default_downloader
+) -> Path:
+    """Write one export_document response to disk, text or binary as the format demands.
+
+    Text formats (markdown/html/txt) return content inline; binary formats
+    (docx/pdf) return a short-lived signed download_url that must be fetched
+    to get the file, per SuperDocs' own tool documentation.
+    """
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    if format in _TEXT_EXPORT_FORMATS:
+        text = next((export_response[k] for k in _TEXT_EXPORT_KEYS if export_response.get(k)), None)
+        if text is None:
+            raise SuperDocsClientError(
+                f"export_document response for format={format!r} carried no text under "
+                f"any of {_TEXT_EXPORT_KEYS}. Fix: check the response shape hasn't changed."
+            )
+        dest_path.write_text(text, encoding="utf-8")
+    else:
+        download_url = export_response.get("download_url")
+        if not download_url:
+            raise SuperDocsClientError(
+                f"export_document response for format={format!r} carried no download_url. "
+                "Fix: binary formats (docx/pdf) are documented to return a signed "
+                "download_url — check the response shape hasn't changed."
+            )
+        dest_path.write_bytes(await downloader(download_url))
+    return dest_path
+
+
 async def generate_pack(
     country_code: str,
     *,
     ledger: Ledger | None = None,
     manifest: dict | None = None,
     country: dict | None = None,
+    out_dir: Path = OUT_DIR,
     client_factory=SuperDocsClient,
+    downloader=_default_downloader,
 ) -> dict:
     """Generate one country's pack: upload, one batched annex edit, approve.
 
@@ -174,4 +220,18 @@ async def generate_pack(
                 chat_calls=ops_from_response(apply_response), wall_time=time.monotonic() - started,
             )
 
-    return {"country_code": country_code, "session_id": session_id, "instruction": instruction}
+        pack_dir = out_dir / country_code
+        exports = {}
+        for fmt, filename in _EXPORT_FILES:
+            started = time.monotonic()
+            export_response = await client.export(session_id=session_id, format=fmt)
+            dest = await _write_export(export_response, pack_dir / filename, fmt, downloader=downloader)
+            ledger.record(f"export-{fmt}", country_code, chat_calls=0, wall_time=time.monotonic() - started)
+            exports[fmt] = dest
+
+    return {
+        "country_code": country_code,
+        "session_id": session_id,
+        "instruction": instruction,
+        "exports": exports,
+    }

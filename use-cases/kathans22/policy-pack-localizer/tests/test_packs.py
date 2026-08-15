@@ -73,7 +73,13 @@ class _FakeSuperDocsClient:
 
     async def export(self, **kwargs):
         self.calls.append(("export", kwargs))
+        if kwargs.get("format") == "docx":
+            return {"download_url": "https://downloads.example/policy-pack.docx"}
         return {"text": "exported markdown"}
+
+
+async def _fake_downloader(url: str) -> bytes:
+    return b"fake docx bytes"
 
 
 def test_assert_no_core_sections_named_passes_a_real_annex_instruction():
@@ -96,7 +102,7 @@ def test_assert_no_core_sections_named_raises_when_a_core_section_is_named():
     assert raised
 
 
-def test_generate_pack_never_sends_a_core_section_number_to_the_client():
+def test_generate_pack_never_sends_a_core_section_number_to_the_client(tmp_path):
     manifest, country = _manifest_and_country()
     ledger = Ledger()
     fake_client = _FakeSuperDocsClient()
@@ -107,7 +113,9 @@ def test_generate_pack_never_sends_a_core_section_number_to_the_client():
             ledger=ledger,
             manifest=manifest,
             country=country,
+            out_dir=tmp_path,
             client_factory=lambda: fake_client,
+            downloader=_fake_downloader,
         )
     )
 
@@ -119,7 +127,7 @@ def test_generate_pack_never_sends_a_core_section_number_to_the_client():
         assert not (named & core_numbers)
 
 
-def test_generate_pack_sends_one_batched_chat_instruction_and_charges_one_operation():
+def test_generate_pack_sends_one_batched_chat_instruction_and_charges_one_operation(tmp_path):
     manifest, country = _manifest_and_country()
     ledger = Ledger()
     fake_client = _FakeSuperDocsClient()
@@ -130,7 +138,9 @@ def test_generate_pack_sends_one_batched_chat_instruction_and_charges_one_operat
             ledger=ledger,
             manifest=manifest,
             country=country,
+            out_dir=tmp_path,
             client_factory=lambda: fake_client,
+            downloader=_fake_downloader,
         )
     )
 
@@ -138,3 +148,32 @@ def test_generate_pack_sends_one_batched_chat_instruction_and_charges_one_operat
     assert len(chat_calls) == 2  # free preview, then the billed fallback apply
     assert chat_calls[0]["message"] == chat_calls[1]["message"] == result["instruction"]
     assert ledger.total_operations == 1
+
+
+def test_generate_pack_exports_markdown_and_docx_to_disk(tmp_path):
+    manifest, country = _manifest_and_country()
+    ledger = Ledger()
+    fake_client = _FakeSuperDocsClient()
+
+    async def fake_downloader(url: str) -> bytes:
+        assert url == "https://downloads.example/policy-pack.docx"
+        return await _fake_downloader(url)
+
+    result = asyncio.run(
+        packs.generate_pack(
+            "IN",
+            ledger=ledger,
+            manifest=manifest,
+            country=country,
+            out_dir=tmp_path,
+            client_factory=lambda: fake_client,
+            downloader=fake_downloader,
+        )
+    )
+
+    md_path = result["exports"]["markdown"]
+    docx_path = result["exports"]["docx"]
+    assert md_path == tmp_path / "IN" / "policy-pack.md"
+    assert md_path.read_text(encoding="utf-8") == "exported markdown"
+    assert docx_path == tmp_path / "IN" / "policy-pack.docx"
+    assert docx_path.read_bytes() == b"fake docx bytes"
