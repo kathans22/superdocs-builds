@@ -372,3 +372,34 @@ why) is in `evidence/ledger-summary.md`, not duplicated here. In short: the idea
 prices a pack at 2 ops (one per annex batch); the real run cost more per pack because
 recovering from the defects above took extra `chat()` turns per affected country before
 `verify_pack` could honestly report every section clean.
+
+## Phase 5 — Acknowledgement forms (Session 6, Prompt 17)
+
+Implemented `ack.py`: `render_form(country, manifest)` builds the acknowledgement
+markdown deterministically — office name, country, pack version, the protected core hash
+(read from the persisted `state/core-lock-v1-{lang}.json`, never recomputed), safeguarding
+lead, and blank recipient/date/signature fields, with field labels and the confirmation
+statement in the office's working language (en/fr/pt) from a small static dictionary.
+`generate_acknowledgement(country_code)` uploads and exports it via SuperDocs.
+
+**Decision: no chat call, ever, for this document.** Filling known fields from a known
+country YAML into a known template has no ambiguity for a model to resolve — the fields
+either exist in the YAML and the lock, or they don't. Spending an operation on it would be,
+per CLAUDE.md, spending money to do arithmetic badly. SuperDocs is used only for the parts
+it actually adds value on: upload (turns the markdown into a document SuperDocs can render)
+and export (produces the styled `.docx` the office actually signs) — both free.
+
+**Live proof, all five countries** (`evidence/ack-generation-report.md`): uploaded and
+exported IN/KE/FR/SN/BR's forms via the real SuperDocs MCP tools. Every `upload`/`export`
+response carried no `usage` field at all — the same "absent = free" signal
+`ledger.ops_from_response` already treats as zero — so the ledger total across all ten
+calls is **0 operations**. Each core hash embedded matches that country's language lock
+exactly; Senegal's and France's forms carry the identical `fr` core hash, the same proof
+the packs themselves carry.
+
+**Return address, one deviation from the brief's field list.** No country YAML carries a
+distinct postal address — `office` and `country` are all that exist. Rather than adding a
+sixth field to five YAML files for a string that would just repeat those two values,
+`return_address` is derived as `f"{office}, {country}"`. If a real postal address is ever
+needed, it is a one-field addition to each country YAML, consistent with "adding a country
+(or a field) is a data change."
