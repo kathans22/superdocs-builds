@@ -185,3 +185,108 @@ async def _translate_changed_sections(
             "instruction named these sections; check the export text or retry."
         )
     return translated
+
+
+def _content_key(language: str, from_version: int, to_version: int) -> str:
+    return f"retranslate:{language}:v{from_version}-v{to_version}"
+
+
+async def retranslate_changed_sections(
+    manifest: dict,
+    language: str,
+    diff: dict,
+    *,
+    ledger: Ledger | None = None,
+    client_factory=SuperDocsClient,
+) -> dict:
+    """Derive the v2 core lock for one affected language: unchanged sections
+    carried forward from the v1 lock byte for byte, changed sections
+    re-translated fresh. Writes state/core-lock-v{to_version}-{lang}.json.
+
+    This is the "carry forward" half of the amendment guarantee: every
+    section in diff['unchanged_sections'] is taken verbatim from the v1
+    lock's persisted 'sections' text (translate.derive_core saves this,
+    never just the hash) and passed through corelock.lock() completely
+    untouched — no SuperDocs call ever sees it. Only diff['changed_sections']
+    is sent to _translate_changed_sections, which costs exactly one
+    operation regardless of country count. If the resulting v2 hash for an
+    "unchanged" section number ever failed to match its v1 hash, that would
+    mean this function's own carry-forward logic is broken, not SuperDocs —
+    the recomputation happens locally, from text this function chose, never
+    from a network response.
+
+    `diff` must come from the SOURCE language (diff_core_versions(manifest,
+    manifest['source_language'], from_version, to_version)), not from
+    `language` itself: a target language's v2 lock does not exist yet — it
+    is what this function produces — so diff_core_versions cannot be run
+    against it beforehand. Section numbers correspond 1:1 across every
+    translation, so the source-language diff's changed/unchanged section
+    numbers apply unchanged to every other language. (Once this function
+    has run, diff_core_versions(manifest, language, from_version,
+    to_version) becomes callable for `language` too, and produces the same
+    changed/unchanged split by construction — useful as a check afterward.)
+
+    Cached by (language, from_version, to_version): a rerun for a language
+    already re-translated at this version pair makes no SuperDocs call and
+    spends no operation.
+    """
+    ledger = ledger if ledger is not None else Ledger()
+    if diff["language"] != manifest["source_language"]:
+        raise ValueError(
+            f"diff was computed for language {diff['language']!r}, but must come from "
+            f"the source language {manifest['source_language']!r} — {language!r}'s v2 "
+            "lock does not exist yet, so diff_core_versions cannot run against it."
+        )
+
+    from_version, to_version = diff["from_version"], diff["to_version"]
+    content_key = _content_key(language, from_version, to_version)
+
+    if ledger.already_charged(content_key) and corelock.lock_exists(to_version, language):
+        ledger.record(
+            "retranslate", language, chat_calls=0, wall_time=0.0,
+            content_key=content_key, output_exists=True,
+        )
+        return corelock.load_lock(to_version, language)
+
+    changed_numbers = diff["changed_sections"]
+
+    v1_lock = corelock.load_lock(from_version, language)
+    v1_sections = v1_lock.get("sections")
+    if not v1_sections:
+        raise ValueError(
+            f"The v{from_version} lock for language {language!r} has no verbatim "
+            "section text saved, only hashes. Fix: this lock predates "
+            "translate.derive_core persisting 'sections' — re-derive it."
+        )
+    v1_sections_by_number = {s["number"]: s for s in v1_sections}
+
+    translated_changed: dict[int, dict] = {}
+    if changed_numbers:
+        translated_changed = await _translate_changed_sections(
+            manifest, language, changed_numbers, ledger=ledger, client_factory=client_factory
+        )
+
+    core_numbers = sorted(s["number"] for s in manifest["sections"] if s["role"] == "core")
+    combined_sections = []
+    for number in core_numbers:
+        if number in changed_numbers:
+            combined_sections.append(translated_changed[number])
+        else:
+            if number not in v1_sections_by_number:
+                raise ValueError(
+                    f"section {number} is in diff['unchanged_sections'] but has no "
+                    f"verbatim text in the v{from_version} {language!r} lock. Fix: "
+                    "check diff_core_versions and the v1 lock cover the same sections."
+                )
+            combined_sections.append(v1_sections_by_number[number])
+
+    lock_data = corelock.lock(combined_sections, to_version, language)
+    lock_data["sections"] = combined_sections
+    corelock.save_lock(lock_data)
+
+    ledger.record(
+        "retranslate", language, chat_calls=0, wall_time=0.0,
+        content_key=content_key, output_exists=False,
+    )
+
+    return lock_data
