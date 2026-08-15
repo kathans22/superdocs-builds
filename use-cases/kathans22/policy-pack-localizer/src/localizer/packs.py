@@ -1,4 +1,4 @@
-"""Generates per-country packs by batching the annex replacement into one call."""
+"""Generates per-country packs by batching the annex replacement into config-sized calls."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from . import config as config_module
 from . import corelock
 from . import sections as sections_module
 from .ledger import Ledger, ops_from_response
-from .mcp_client import SuperDocsClient, SuperDocsClientError, parse_proposed_changes
+from .mcp_client import SuperDocsClient, SuperDocsClientError
 
 ROOT = Path(__file__).resolve().parents[2]
 POLICY_MASTER_PATH = config_module.CONFIG_DIR / "policy-master.md"
@@ -70,15 +70,20 @@ _SLOT_RENDERERS = {
 }
 
 
-def build_instruction(manifest: dict, country: dict) -> str:
-    """Build the single instruction that replaces every annex section in one call.
+def build_instruction(manifest: dict, country: dict, sections: list[dict] | None = None) -> str:
+    """Build one instruction that replaces the given annex sections in one call.
 
-    A multi-section edit sent as one chat request is one operation; the same
-    edits as four separate calls would cost four. This function is what makes
-    generate_pack's chat call batched rather than looped per section, and that
-    batching is deliberate — it is the reason a pack costs 1 operation, not 4.
+    A multi-section edit sent as one chat request costs one operation; the
+    same edits as separate calls would cost one each. Batching is
+    deliberate — it is why a pack costs a small number of operations, not
+    one per section. `sections` defaults to every annex section (build the
+    full instruction); generate_pack calls this per-batch with a subset,
+    since SuperDocs does not reliably apply all of them in a single call
+    (see PROGRESS.md and config/manifest.yaml's annex_batch_size).
     """
-    annex_sections = [s for s in manifest["sections"] if s["role"] == "annex"]
+    annex_sections = sections if sections is not None else [
+        s for s in manifest["sections"] if s["role"] == "annex"
+    ]
     language_name = _LANGUAGE_NAMES.get(country["language"], country["language"])
 
     lines = [
@@ -96,7 +101,6 @@ def build_instruction(manifest: dict, country: dict) -> str:
 
 
 _SECTION_MENTION_RE = re.compile(r"\bsection\s+(\d+)\b", re.IGNORECASE)
-_PARTIAL_APPLY_RE = re.compile(r"updated\s+(\d+)\s+of\s+(\d+)\s+sections?", re.IGNORECASE)
 
 
 def assert_no_core_sections_named(instruction: str, manifest: dict) -> None:
@@ -328,6 +332,113 @@ async def _write_export(
     return dest_path
 
 
+_MAX_RETRY_DEPTH = 4
+
+
+def _chunk(items: list, size: int) -> list[list]:
+    return [items[i : i + size] for i in range(0, len(items), size)]
+
+
+def _sections_landed(numbers: list[int], markdown_text: str, placeholders: dict[int, str]) -> set[int]:
+    """Which of `numbers` no longer carry the master's unedited placeholder text.
+
+    The only reliable signal that an edit actually happened: SuperDocs'
+    chat response text is not one — observed live, a batch of 4 sections
+    returned "Successfully updated all 4 sections" (and, on other attempts,
+    "went through 4 section(s) but nothing actually changed") while the
+    document itself was untouched either way. This checks the document.
+    """
+    current = {s["number"]: s for s in sections_module.parse_sections(markdown_text)}
+    landed = set()
+    for number in numbers:
+        section = current.get(number)
+        if section is not None and placeholders[number] not in corelock.normalise(section["body"]):
+            landed.add(number)
+    return landed
+
+
+async def _export_markdown_text(client, session_id: str, ledger: Ledger, country_code: str, label: str) -> str:
+    started = time.monotonic()
+    export = await client.export(session_id=session_id, format="markdown")
+    ledger.record(f"export-markdown ({label})", country_code, chat_calls=0, wall_time=time.monotonic() - started)
+    return export.get("text") or export.get("markdown") or export.get("content")
+
+
+async def _apply_annex_batch(
+    client,
+    session_id: str,
+    manifest: dict,
+    country: dict,
+    ledger: Ledger,
+    country_code: str,
+    section_numbers: list[int],
+    annex_by_number: dict[int, dict],
+    placeholders: dict[int, str],
+    depth: int = 0,
+) -> None:
+    """Send one batch as a single chat call, then verify every section in it
+    actually changed — a success-shaped response is not trusted on its own.
+
+    If any section did not land, this is the decision point: split just the
+    sections that failed into smaller batches and retry them (bounded by
+    _MAX_RETRY_DEPTH), rather than resending the same batch and hoping, or
+    trusting the response text. A single section that still will not land
+    after being isolated to a batch of one is left for verify_pack's
+    placeholder check downstream to catch and quarantine.
+    """
+    if not section_numbers:
+        return
+
+    batch_sections = [annex_by_number[n] for n in section_numbers]
+    instruction = build_instruction(manifest, country, sections=batch_sections)
+    assert_no_core_sections_named(instruction, manifest)
+
+    started = time.monotonic()
+    response = await client.chat(message=instruction, session_id=session_id, response_mode="compact")
+    ledger.record(
+        "chat", f"{country_code} annex batch {section_numbers} (depth {depth})",
+        chat_calls=ops_from_response(response), wall_time=time.monotonic() - started,
+    )
+
+    markdown_text = await _export_markdown_text(
+        client, session_id, ledger, country_code, f"verify batch {section_numbers}"
+    )
+    landed = _sections_landed(section_numbers, markdown_text, placeholders)
+    missing = [n for n in section_numbers if n not in landed]
+
+    if not missing or depth >= _MAX_RETRY_DEPTH:
+        return
+    if missing == section_numbers and len(section_numbers) == 1:
+        return  # isolated to one section and still won't land; not a batching problem
+
+    retry_size = max(1, len(missing) // 2)
+    for retry_batch in _chunk(missing, retry_size):
+        await _apply_annex_batch(
+            client, session_id, manifest, country, ledger, country_code,
+            retry_batch, annex_by_number, placeholders, depth=depth + 1,
+        )
+
+
+async def _localise_annex(
+    client, session_id: str, manifest: dict, country: dict, ledger: Ledger, country_code: str
+) -> str:
+    """Replace every annex section, batched at manifest['annex_batch_size'] per
+    call, with each batch's result verified against the document before moving
+    on. Returns the final exported markdown text.
+    """
+    annex_by_number = {s["number"]: s for s in manifest["sections"] if s["role"] == "annex"}
+    placeholders = _master_annex_placeholders(manifest)
+    batch_size = manifest["annex_batch_size"]
+
+    for batch in _chunk(sorted(annex_by_number), batch_size):
+        await _apply_annex_batch(
+            client, session_id, manifest, country, ledger, country_code,
+            batch, annex_by_number, placeholders,
+        )
+
+    return await _export_markdown_text(client, session_id, ledger, country_code, "final")
+
+
 async def generate_pack(
     country_code: str,
     *,
@@ -338,16 +449,16 @@ async def generate_pack(
     client_factory=SuperDocsClient,
     downloader=_default_downloader,
 ) -> dict:
-    """Generate one country's pack: upload, one batched annex edit, approve.
+    """Generate one country's pack: upload, then the annex edit in batches.
 
-    Flow: upload the master, send ONE chat call replacing every annex section
-    at once, parse the proposed changes, then approve. approve_change only
-    works against a chat_async job_id; a synchronous chat() preview never
-    creates one (see PROGRESS.md, proven live in scripts/smoke.py), so when
-    approve fails as documented, this falls back to a second chat call with
-    the default approval_mode (approve_all) to actually apply the edit. The
-    preview call is free, so the pack still costs the single operation
-    CLAUDE.md's economics assume.
+    Flow: upload the master, then replace every annex section via
+    _localise_annex, which sends the edit in manifest['annex_batch_size']
+    -sized batches and verifies each one against the document rather than
+    trusting the response — see _apply_annex_batch. A pack now costs one
+    operation per batch, not one operation total: live testing proved
+    SuperDocs does not reliably apply all four annex sections in a single
+    call (see PROGRESS.md and evidence/superdocs-batch-limit-report.md), so
+    CLAUDE.md's economics were corrected to match what actually happens.
     """
     ledger = ledger if ledger is not None else Ledger()
     manifest = manifest if manifest is not None else config_module.load_manifest()
@@ -373,72 +484,20 @@ async def generate_pack(
             "skipped": True,
         }
 
-    instruction = build_instruction(manifest, country)
-    assert_no_core_sections_named(instruction, manifest)
-
     session_id = f"pack-{country_code.lower()}"
     file_base64 = base64.b64encode(POLICY_MASTER_PATH.read_bytes()).decode("ascii")
+    instruction = build_instruction(manifest, country)  # full instruction, kept for the return value
 
     async with client_factory() as client:
         started = time.monotonic()
         await client.upload(filename="policy-master.md", file_base64=file_base64, session_id=session_id)
         ledger.record("upload", country_code, chat_calls=0, wall_time=time.monotonic() - started)
 
-        started = time.monotonic()
-        preview = await client.chat(
-            message=instruction, session_id=session_id,
-            approval_mode="ask_every_time", response_mode="compact",
-        )
-        ledger.record(
-            "chat", f"{country_code} annex edit (preview)",
-            chat_calls=ops_from_response(preview), wall_time=time.monotonic() - started,
-        )
-        changes = parse_proposed_changes(preview)
+        markdown_text = await _localise_annex(client, session_id, manifest, country, ledger, country_code)
 
-        started = time.monotonic()
-        try:
-            for change in changes:
-                await client.approve(
-                    session_id=session_id, job_id=session_id,
-                    change_id=change["change_id"], approved=True,
-                )
-            ledger.record("approve", country_code, chat_calls=0, wall_time=time.monotonic() - started)
-        except SuperDocsClientError:
-            ledger.record(
-                "approve", f"{country_code} (failed, falling back)",
-                chat_calls=0, wall_time=time.monotonic() - started,
-            )
-            started = time.monotonic()
-            apply_response = await client.chat(
-                message=instruction, session_id=session_id, response_mode="compact"
-            )
-            ledger.record(
-                "chat", f"{country_code} annex edit (apply)",
-                chat_calls=ops_from_response(apply_response), wall_time=time.monotonic() - started,
-            )
-
-            match = _PARTIAL_APPLY_RE.search(apply_response.get("response") or "")
-            if match and match.group(1) != match.group(2):
-                # A partial batch apply is resolved by resending the identical
-                # batched instruction, not by targeting only the missed
-                # section: a single-section retry was observed live to
-                # collide with the still-settling batched edit and produce a
-                # merged section containing both the old and new text. One
-                # bounded retry; whatever lands is caught by verify_pack below.
-                started = time.monotonic()
-                retry_response = await client.chat(
-                    message=instruction, session_id=session_id, response_mode="compact"
-                )
-                ledger.record(
-                    "chat", f"{country_code} annex edit (retry incomplete batch)",
-                    chat_calls=ops_from_response(retry_response), wall_time=time.monotonic() - started,
-                )
-
-        started = time.monotonic()
-        markdown_export = await client.export(session_id=session_id, format="markdown")
-        ledger.record("export-markdown", country_code, chat_calls=0, wall_time=time.monotonic() - started)
-        markdown_text = markdown_export.get("text") or markdown_export.get("markdown") or markdown_export.get("content")
-
+        # export_document, not the chat response, is the one export used for
+        # everything downstream: verification, quarantine, and the shipped file.
+        markdown_export = {"text": markdown_text}
         verification = verify_pack(markdown_text, manifest, country["language"])
         if not verification["passed"]:
             # Quarantined, not dropped: the failing export is preserved for
