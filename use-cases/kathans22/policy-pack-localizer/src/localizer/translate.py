@@ -1,4 +1,29 @@
-"""Translates the locked core per language, cached by (core_version, language)."""
+"""Translates the locked core per language, cached by (core_version, language).
+
+For every language other than the source, the translated core is derived
+exactly once per core_version and locked — every pack generated in that
+language afterward (packs.generate_pack) reuses this locked text byte for
+byte instead of re-translating. A second, third, or Nth country sharing a
+language costs zero additional operations; see CLAUDE.md's operation
+economics.
+
+This module sends the one instruction in this codebase that legitimately
+names core section numbers (_build_translation_instruction). Every other
+instruction sent to SuperDocs — packs.build_instruction, used to localise a
+pack's annex — must never name a core section, and
+packs.assert_no_core_sections_named is a hard stop enforcing exactly that
+before such an instruction is ever sent. Deriving a translation is different
+in kind, not degree: it is not editing a shipped pack, it is producing the
+one text every pack in `language` will carry afterward, and naming the core
+sections is the only way to ask for precisely that translation and nothing
+else.
+
+This module deliberately never imports packs.py, so
+packs.assert_no_core_sections_named is structurally unreachable from this
+path — there is no code path by which a translation instruction could be
+run through the assertion that exists specifically to reject it. The two
+flows share only corelock, ledger, and mcp_client.
+"""
 
 from __future__ import annotations
 
@@ -20,10 +45,10 @@ _LANGUAGE_NAMES = {"fr": "French", "pt": "Portuguese"}
 
 
 def _build_translation_instruction(manifest: dict, language: str) -> str:
-    """Build the instruction that translates the core sections into `language`.
-
-    Names core sections explicitly — see derive_core's docstring for why
-    this is the one legitimate place in the codebase that does so.
+    """Build the one instruction in this codebase that legitimately names
+    core section numbers — see this module's docstring for why. Its output
+    must never be passed to packs.assert_no_core_sections_named (it would,
+    correctly, reject it); this module never imports that function.
     """
     core_sections = [s for s in manifest["sections"] if s["role"] == "core"]
     language_name = _LANGUAGE_NAMES.get(language, language)

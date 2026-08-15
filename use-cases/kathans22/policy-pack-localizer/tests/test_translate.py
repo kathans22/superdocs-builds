@@ -6,8 +6,11 @@ from __future__ import annotations
 
 import asyncio
 
+from pathlib import Path
+
 from localizer import config as config_module
 from localizer import corelock
+from localizer import packs
 from localizer import sections as sections_module
 from localizer import translate
 from localizer.ledger import Ledger
@@ -187,3 +190,31 @@ def test_derive_core_re_runs_when_the_lock_file_is_missing(tmp_path, monkeypatch
     )
 
     assert len(fake_client.calls) > 0
+
+
+def test_translation_instruction_would_be_rejected_by_the_annex_editing_assertion():
+    """Proves the translation instruction really does name core sections — and
+    that packs.assert_no_core_sections_named, the guard that exists
+    specifically to reject that, would correctly reject it."""
+    manifest = _manifest()
+    instruction = translate._build_translation_instruction(manifest, "fr")
+
+    raised = False
+    try:
+        packs.assert_no_core_sections_named(instruction, manifest)
+    except ValueError:
+        raised = True
+    assert raised
+
+
+def test_translate_module_never_imports_packs():
+    """A structural check, not a behavioural one: translate.py must never
+    import packs.py, so packs.assert_no_core_sections_named — the guard
+    built to reject exactly this module's instruction — is not just unused
+    here but unreachable, regardless of what any docstring says about it.
+    """
+    source = Path(translate.__file__).read_text(encoding="utf-8")
+
+    assert "import packs" not in source
+    assert not hasattr(translate, "packs")
+    assert not hasattr(translate, "assert_no_core_sections_named")
