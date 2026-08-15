@@ -177,3 +177,45 @@ def test_generate_pack_exports_markdown_and_docx_to_disk(tmp_path):
     assert md_path.read_text(encoding="utf-8") == "exported markdown"
     assert docx_path == tmp_path / "IN" / "policy-pack.docx"
     assert docx_path.read_bytes() == b"fake docx bytes"
+
+
+def test_generate_pack_is_idempotent_for_the_same_country_and_core_version(tmp_path):
+    manifest, country = _manifest_and_country()
+    ledger = Ledger()
+    fake_client = _FakeSuperDocsClient()
+    kwargs = dict(
+        ledger=ledger, manifest=manifest, country=country, out_dir=tmp_path,
+        client_factory=lambda: fake_client, downloader=_fake_downloader,
+    )
+
+    first = asyncio.run(packs.generate_pack("IN", **kwargs))
+    assert first["skipped"] is False
+    calls_after_first_run = len(fake_client.calls)
+    ops_after_first_run = ledger.total_operations
+
+    second = asyncio.run(packs.generate_pack("IN", **kwargs))
+
+    assert second["skipped"] is True
+    assert len(fake_client.calls) == calls_after_first_run  # no new SuperDocs calls at all
+    assert ledger.total_operations == ops_after_first_run  # nothing re-bought
+    assert second["exports"]["markdown"] == first["exports"]["markdown"]
+
+
+def test_generate_pack_re_runs_when_the_output_files_are_missing(tmp_path):
+    # Idempotency is keyed on the ledger entry AND the files still being on
+    # disk; a stale ledger with no output present must not skip real work.
+    manifest, country = _manifest_and_country()
+    ledger = Ledger()
+    content_key = packs._content_key("IN", manifest["core_version"])
+    ledger.record("pack", "IN", chat_calls=0, wall_time=0.0, content_key=content_key)
+    fake_client = _FakeSuperDocsClient()
+
+    result = asyncio.run(
+        packs.generate_pack(
+            "IN", ledger=ledger, manifest=manifest, country=country, out_dir=tmp_path,
+            client_factory=lambda: fake_client, downloader=_fake_downloader,
+        )
+    )
+
+    assert result["skipped"] is False
+    assert len(fake_client.calls) > 0

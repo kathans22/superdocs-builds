@@ -105,6 +105,14 @@ def assert_no_core_sections_named(instruction: str, manifest: dict) -> None:
         )
 
 
+def _content_key(country_code: str, core_version: int) -> str:
+    return f"pack:{country_code}:v{core_version}"
+
+
+def _pack_files_exist(pack_dir: Path) -> bool:
+    return all((pack_dir / filename).exists() for _, filename in _EXPORT_FILES)
+
+
 _TEXT_EXPORT_FORMATS = {"markdown", "html", "txt"}
 _TEXT_EXPORT_KEYS = ("text", "markdown", "content")
 _EXPORT_FILES = (("markdown", "policy-pack.md"), ("docx", "policy-pack.docx"))
@@ -167,6 +175,12 @@ async def generate_pack(
     the default approval_mode (approve_all) to actually apply the edit. The
     preview call is free, so the pack still costs the single operation
     CLAUDE.md's economics assume.
+
+    Idempotent: if a pack for this country and core_version was already
+    charged in `ledger` (its persisted state, loaded by the caller) and its
+    exported files are still on disk, no SuperDocs call is made at all and
+    the run is recorded as SKIPPED at 0 operations — CLAUDE.md's rule that
+    an operation already bought for the same inputs is not re-bought.
     """
     ledger = ledger if ledger is not None else Ledger()
     manifest = manifest if manifest is not None else config_module.load_manifest()
@@ -175,6 +189,22 @@ async def generate_pack(
         if country is not None
         else config_module.load_country(config_module.COUNTRIES_DIR / f"{country_code}.yaml")
     )
+
+    pack_dir = out_dir / country_code
+    content_key = _content_key(country_code, manifest["core_version"])
+
+    if ledger.already_charged(content_key) and _pack_files_exist(pack_dir):
+        ledger.record(
+            "pack", country_code, chat_calls=0, wall_time=0.0,
+            content_key=content_key, output_exists=True,
+        )
+        return {
+            "country_code": country_code,
+            "session_id": None,
+            "instruction": None,
+            "exports": {fmt: pack_dir / filename for fmt, filename in _EXPORT_FILES},
+            "skipped": True,
+        }
 
     instruction = build_instruction(manifest, country)
     assert_no_core_sections_named(instruction, manifest)
@@ -220,7 +250,6 @@ async def generate_pack(
                 chat_calls=ops_from_response(apply_response), wall_time=time.monotonic() - started,
             )
 
-        pack_dir = out_dir / country_code
         exports = {}
         for fmt, filename in _EXPORT_FILES:
             started = time.monotonic()
@@ -229,9 +258,18 @@ async def generate_pack(
             ledger.record(f"export-{fmt}", country_code, chat_calls=0, wall_time=time.monotonic() - started)
             exports[fmt] = dest
 
+    # Marks this content_key as charged for future idempotency checks (see the
+    # early-return above), without adding to total_operations a second time —
+    # the actual operation was already counted by the chat step(s) above.
+    ledger.record(
+        "pack", country_code, chat_calls=0, wall_time=0.0,
+        content_key=content_key, output_exists=False,
+    )
+
     return {
         "country_code": country_code,
         "session_id": session_id,
         "instruction": instruction,
         "exports": exports,
+        "skipped": False,
     }
