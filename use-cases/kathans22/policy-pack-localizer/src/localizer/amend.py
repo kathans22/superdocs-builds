@@ -7,6 +7,8 @@ import datetime
 import time
 from pathlib import Path
 
+import httpx2
+
 from . import config as config_module
 from . import corelock
 from . import sections as sections_module
@@ -534,3 +536,210 @@ def generate_change_notice(
         "",
     ]
     return "\n".join(lines)
+
+
+class NoticeIntegrityError(RuntimeError):
+    """Raised when a change notice's one billed step did not land cleanly:
+    the placeholder summary is still present, or the quoted before/after
+    text no longer matches the locked/archived text verbatim. A notice
+    that raises this is not written to out/ and the run does not report
+    success for this country — the same discipline packs.PackIntegrityError
+    applies to a pack, scoped to a notice instead.
+    """
+
+
+async def _default_downloader(url: str) -> bytes:
+    async with httpx2.AsyncClient() as http:
+        response = await http.get(url)
+        response.raise_for_status()
+        return response.content
+
+
+async def _write_notice_export(export_response: dict, dest_path: Path, format: str, downloader=_default_downloader) -> Path:
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    if format == "markdown":
+        text = export_response.get("text") or export_response.get("markdown") or export_response.get("content")
+        if text is None:
+            raise SuperDocsClientError(
+                "export_document response for the change notice carried no markdown "
+                "text. Fix: check the response shape hasn't changed."
+            )
+        dest_path.write_text(text, encoding="utf-8")
+    else:
+        download_url = export_response.get("download_url")
+        if not download_url:
+            raise SuperDocsClientError(
+                f"export_document response for format={format!r} carried no "
+                "download_url. Fix: binary formats are documented to return a "
+                "signed download_url — check the response shape hasn't changed."
+            )
+        dest_path.write_bytes(await downloader(download_url))
+    return dest_path
+
+
+def _content_key_notice(country_code: str, from_version: int, to_version: int) -> str:
+    return f"notice:{country_code}:v{from_version}-v{to_version}"
+
+
+# Bounded retry for the notice's one billed chat call — see
+# send_change_notice's docstring for the live failure mode this protects
+# against (a billed call that returns a confused non-edit response).
+_MAX_NOTICE_ATTEMPTS = 2
+
+
+async def send_change_notice(
+    country_code: str,
+    manifest: dict,
+    diff: dict,
+    *,
+    ledger: Ledger | None = None,
+    country: dict | None = None,
+    today: datetime.date | None = None,
+    out_dir: Path = OUT_DIR,
+    client_factory=SuperDocsClient,
+    downloader=_default_downloader,
+) -> dict:
+    """Send one country's change notice: build the deterministic draft
+    (generate_change_notice), fill in its one interpretive line with a
+    single billed SuperDocs call, verify it landed without disturbing the
+    quoted before/after text, and export.
+
+    Cost: one operation for this country — a single-document call, unlike
+    a pack's multi-section batch (CLAUDE.md's economics). Unlike
+    translate.derive_core, this is NOT cached across countries sharing a
+    language: each notice is a distinct per-office document (its header,
+    return date, and the model's summary text all belong to that one
+    document instance), so IN and KE — both English — each cost their own
+    operation, matching CLAUDE.md's worked example (2 en notices = 2 ops,
+    not 1). Idempotency is still per (country_code, from_version,
+    to_version): rerunning for a country already notified at this version
+    pair makes no SuperDocs call and spends no operation.
+
+    The model is asked to do exactly one thing — replace the placeholder
+    with a short plain-language explanation, grounded only in the
+    'Previously'/'Now' text already in the draft — and never to touch
+    anything else. The response is not trusted on its own: after export,
+    this function checks the placeholder is gone AND that every quoted
+    before/after section body still appears verbatim (normalised), the
+    same "verify the artifact, not the promise" discipline packs.py
+    applies to an annex batch.
+
+    Bounded retry (_MAX_NOTICE_ATTEMPTS): live testing showed a call can
+    come back with a confused non-edit response ("I am not sure how to
+    help you...", changes: null) while still being billed — the same class
+    of unreliability documented for pack generation in
+    evidence/superdocs-batch-limit-report.md, here on a single-section
+    document instead of a batch. Each attempt is its own ledger line, so a
+    notice that needed a retry honestly costs 2 operations, not the
+    idealised 1 — the ledger reports what actually happened, never an
+    assumed constant.
+    """
+    ledger = ledger if ledger is not None else Ledger()
+    country = (
+        country if country is not None
+        else config_module.load_country(config_module.COUNTRIES_DIR / f"{country_code}.yaml")
+    )
+    from_version, to_version = diff["from_version"], diff["to_version"]
+    content_key = _content_key_notice(country_code, from_version, to_version)
+    notice_dir = out_dir / country_code
+    markdown_path = notice_dir / f"change-notice-v{from_version}-v{to_version}.md"
+    docx_path = notice_dir / f"change-notice-v{from_version}-v{to_version}.docx"
+
+    if ledger.already_charged(content_key) and markdown_path.exists() and docx_path.exists():
+        ledger.record(
+            "notice", country_code, chat_calls=0, wall_time=0.0,
+            content_key=content_key, output_exists=True,
+        )
+        return {"country_code": country_code, "exports": {"markdown": markdown_path, "docx": docx_path}, "skipped": True}
+
+    if not diff["changed_sections"]:
+        raise ValueError(
+            f"diff has no changed_sections — there is nothing to notify {country_code} "
+            "about. Fix: this diff must come from an actual core amendment."
+        )
+
+    language = country["language"]
+    draft = generate_change_notice(country_code, manifest, diff, country=country, today=today)
+    placeholder = _SUMMARY_PLACEHOLDER.get(language, _SUMMARY_PLACEHOLDER["en"])
+    language_name = _LANGUAGE_NAMES.get(language, language)
+
+    before_sections = _core_sections_at(from_version, language, manifest)
+    after_sections = _core_sections_at(to_version, language, manifest)
+
+    instruction = "\n".join([
+        f"This document is a change notice for {country['office']} ({country['country']}). "
+        f"Replace every occurrence of the placeholder text {placeholder!r} with a short "
+        f"(1-2 sentence) plain-language explanation, in {language_name}, of what changed in "
+        "the section immediately above it. Base the explanation only on the text already "
+        "shown under 'Previously'/'Now' in that section — do not invent any fact not shown "
+        "there. Do not change anything else in the document.",
+    ])
+    session_id = f"notice-{country_code.lower()}-v{from_version}-v{to_version}"
+
+    async with client_factory() as client:
+        started = time.monotonic()
+        await client.upload(
+            filename="change-notice.md",
+            file_base64=base64.b64encode(draft.encode("utf-8")).decode("ascii"),
+            session_id=session_id,
+        )
+        ledger.record("upload", country_code, chat_calls=0, wall_time=time.monotonic() - started)
+
+        markdown_text = None
+        for attempt in range(1, _MAX_NOTICE_ATTEMPTS + 1):
+            started = time.monotonic()
+            response = await client.chat(message=instruction, session_id=session_id, response_mode="compact")
+            ledger.record(
+                "chat", f"notice summary {country_code} (attempt {attempt})",
+                chat_calls=ops_from_response(response), wall_time=time.monotonic() - started,
+            )
+
+            started = time.monotonic()
+            export = await client.export(session_id=session_id, format="markdown")
+            ledger.record(
+                "export-markdown", country_code, chat_calls=0, wall_time=time.monotonic() - started
+            )
+
+            candidate = export.get("text") or export.get("markdown") or export.get("content")
+            if not candidate:
+                raise SuperDocsClientError(
+                    f"export_document response for the {country_code} change notice "
+                    "carried no text. Fix: check the response shape hasn't changed."
+                )
+            if placeholder not in candidate:
+                markdown_text = candidate
+                break
+
+        if markdown_text is None:
+            raise NoticeIntegrityError(
+                f"The {country_code} change notice still contains the placeholder "
+                f"{placeholder!r} after {_MAX_NOTICE_ATTEMPTS} attempt(s) — the summary "
+                "did not land. Fix: inspect the chat responses, or retry this country later."
+            )
+
+        normalised_export = corelock.normalise(markdown_text)
+        for number in diff["changed_sections"]:
+            for label, section in (("previous", before_sections[number]), ("new", after_sections[number])):
+                body_norm = corelock.normalise(section["body"])
+                if body_norm not in normalised_export:
+                    raise NoticeIntegrityError(
+                        f"The {country_code} change notice's quoted {label} text for "
+                        f"section {number} no longer matches the locked/archived text "
+                        "verbatim after the summary call — the model may have altered "
+                        "the quote. Fix: this notice is not shipped."
+                    )
+
+        exports = {
+            "markdown": await _write_notice_export({"text": markdown_text}, markdown_path, "markdown"),
+        }
+        started = time.monotonic()
+        docx_export = await client.export(session_id=session_id, format="docx")
+        exports["docx"] = await _write_notice_export(docx_export, docx_path, "docx", downloader=downloader)
+        ledger.record("export-docx", country_code, chat_calls=0, wall_time=time.monotonic() - started)
+
+    ledger.record(
+        "notice", country_code, chat_calls=0, wall_time=0.0,
+        content_key=content_key, output_exists=False,
+    )
+
+    return {"country_code": country_code, "exports": exports, "skipped": False}
