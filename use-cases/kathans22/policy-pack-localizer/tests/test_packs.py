@@ -517,6 +517,58 @@ def test_generate_pack_blocks_before_any_superdocs_call_on_a_corrupted_core_lock
     assert fake_client.calls == []  # blocked before any SuperDocs call at all
 
 
+def test_france_and_senegal_share_an_identical_core_hash_with_distinct_annexes(tmp_path, monkeypatch):
+    """The hero claim, made provable: two French-speaking countries, two
+    entirely different annexes, one identical core hash — and the core
+    translation is spent exactly once, not once per country."""
+    manifest = config_module.load_manifest()
+    fr = config_module.load_country(config_module.COUNTRIES_DIR / "FR.yaml")
+    sn = config_module.load_country(config_module.COUNTRIES_DIR / "SN.yaml")
+    monkeypatch.setattr(corelock, "STATE_DIR", tmp_path / "state")
+    ledger = Ledger()
+    fake_client = _MultiSessionFakeClient(manifest, {"FR": fr, "SN": sn})
+    out_dir = tmp_path / "out"
+    common_kwargs = dict(
+        ledger=ledger, manifest=manifest, out_dir=out_dir,
+        client_factory=lambda: fake_client, downloader=_fake_downloader,
+    )
+
+    async def run_both():
+        await packs.generate_pack("FR", country=fr, **common_kwargs)
+        await packs.generate_pack("SN", country=sn, **common_kwargs)
+
+    asyncio.run(run_both())
+
+    fr_markdown = (out_dir / "FR" / "policy-pack.md").read_text(encoding="utf-8")
+    sn_markdown = (out_dir / "SN" / "policy-pack.md").read_text(encoding="utf-8")
+
+    fr_core = packs.extract_core_sections(fr_markdown, manifest)
+    sn_core = packs.extract_core_sections(sn_markdown, manifest)
+    fr_hash = corelock.lock(fr_core, manifest["core_version"], "fr")["core_hash"]
+    sn_hash = corelock.lock(sn_core, manifest["core_version"], "fr")["core_hash"]
+
+    print(f"FR core_hash: {fr_hash}")
+    print(f"SN core_hash: {sn_hash}")
+    assert fr_hash == sn_hash, "FR and SN must carry byte-identical core text"
+
+    for verification in (
+        packs.verify_pack(fr_markdown, manifest, "fr"),
+        packs.verify_pack(sn_markdown, manifest, "fr"),
+    ):
+        assert verification["passed"] is True
+
+    fr_annex = {s["number"]: s["body"] for s in sections_module.parse_sections(fr_markdown) if s["number"] >= 6}
+    sn_annex = {s["number"]: s["body"] for s in sections_module.parse_sections(sn_markdown) if s["number"] >= 6}
+    assert fr_annex != sn_annex  # genuinely different annexes, not a swapped name
+
+    # Exactly one translation call across both countries, not one each:
+    translate_chats = [
+        kwargs for name, kwargs in fake_client.calls
+        if name == "chat" and kwargs["session_id"] == "translate-fr"
+    ]
+    assert len(translate_chats) == 1
+
+
 def test_generate_pack_quarantines_a_pack_whose_annex_never_lands(tmp_path, monkeypatch):
     # lands_at_size=0: no batch, however small, ever actually mutates the
     # document — reproducing a total, unrecovered failure of the live bug,
