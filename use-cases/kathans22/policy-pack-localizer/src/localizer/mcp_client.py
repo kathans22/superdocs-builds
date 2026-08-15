@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import os
+import time
 from contextlib import AsyncExitStack
 
 import httpx2
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+
+logger = logging.getLogger(__name__)
 
 MCP_URL = "https://api.superdocs.app/mcp/"
 
@@ -17,6 +22,25 @@ MCP_URL = "https://api.superdocs.app/mcp/"
 # applies. Override it here so the transport layer imposes no timeout of its own;
 # _call_tool's own ceiling is the single place a timeout is enforced.
 _TRANSPORT_TIMEOUT = httpx2.Timeout(None)
+
+# SuperDocs calls legitimately run 30 seconds to several minutes with no visible
+# progress; this is a safety net against a genuinely hung call, not a normal
+# operating limit. It must never be tight enough to cancel a working call.
+DEFAULT_CALL_TIMEOUT_SECONDS = 900.0
+
+# Transport-layer failures only — a connection that was never established or
+# broke mid-flight. A slow-but-live response is never one of these, so it is
+# never retried; only a demonstrable transport failure is.
+_TRANSPORT_ERRORS = (
+    httpx2.TransportError,
+    httpx2.ConnectError,
+    httpx2.ReadError,
+    httpx2.WriteError,
+    httpx2.RemoteProtocolError,
+    ConnectionError,
+)
+_TRANSPORT_RETRY_ATTEMPTS = 3
+_TRANSPORT_RETRY_BACKOFF_SECONDS = 2.0
 
 
 class SuperDocsClientError(RuntimeError):
@@ -41,8 +65,9 @@ class SuperDocsClient:
     Everything else on the SuperDocs MCP surface is optional depth not built here.
     """
 
-    def __init__(self, url: str = MCP_URL):
+    def __init__(self, url: str = MCP_URL, call_timeout: float = DEFAULT_CALL_TIMEOUT_SECONDS):
         self._url = url
+        self._call_timeout = call_timeout
         self._exit_stack: AsyncExitStack | None = None
         self._session: ClientSession | None = None
 
@@ -82,7 +107,43 @@ class SuperDocsClient:
                 f"Cannot call '{name}': not connected. Fix: use "
                 "'async with SuperDocsClient() as client:' or call connect() first."
             )
-        result = await self._session.call_tool(name, arguments)
+
+        attempt = 0
+        while True:
+            attempt += 1
+            started = time.monotonic()
+            try:
+                result = await asyncio.wait_for(
+                    self._session.call_tool(name, arguments), timeout=self._call_timeout
+                )
+            except asyncio.TimeoutError as exc:
+                elapsed = time.monotonic() - started
+                raise SuperDocsClientError(
+                    f"SuperDocs tool '{name}' exceeded the {self._call_timeout:.0f}s ceiling "
+                    f"after {elapsed:.0f}s. This is a safety net against a hung call, not a "
+                    "normal failure — SuperDocs calls legitimately run for minutes. Fix: check "
+                    "the session/job state on SuperDocs before retrying; the original call may "
+                    "still be running server-side, so do not blindly re-call."
+                ) from exc
+            except _TRANSPORT_ERRORS as exc:
+                elapsed = time.monotonic() - started
+                logger.warning(
+                    "SuperDocs tool '%s' transport failure after %.1fs (attempt %d/%d): %s",
+                    name, elapsed, attempt, _TRANSPORT_RETRY_ATTEMPTS, exc,
+                )
+                if attempt >= _TRANSPORT_RETRY_ATTEMPTS:
+                    raise SuperDocsClientError(
+                        f"SuperDocs tool '{name}' failed after {attempt} transport-level "
+                        f"attempts: {exc}. Fix: check network connectivity to {self._url} and "
+                        "that the SuperDocs MCP server is reachable, then retry."
+                    ) from exc
+                await asyncio.sleep(_TRANSPORT_RETRY_BACKOFF_SECONDS * attempt)
+                continue
+            else:
+                elapsed = time.monotonic() - started
+                logger.info("SuperDocs tool '%s' completed in %.1fs", name, elapsed)
+                break
+
         if result.isError:
             detail = _first_text(result.content) or "no error detail returned"
             raise SuperDocsClientError(f"SuperDocs tool '{name}' returned an error: {detail}")
