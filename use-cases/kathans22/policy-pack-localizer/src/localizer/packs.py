@@ -138,6 +138,21 @@ def _master_annex_placeholders(manifest: dict) -> dict[int, str]:
     }
 
 
+def extract_core_sections(markdown_text: str, manifest: dict) -> list[dict]:
+    """Parse an exported pack back into sections and keep only the core ones.
+
+    This is the read side of the verification round trip: `corelock.lock()`
+    was built from `policy-master.md`'s core sections; this extracts the
+    same-shaped sections (number, heading, body) from what SuperDocs actually
+    exported, so the two can be compared on equal terms — same parser
+    (sections.parse_sections), same section shape, same core/annex split
+    (from the manifest, not re-derived from the text).
+    """
+    all_sections = sections_module.parse_sections(markdown_text)
+    core_numbers = {s["number"] for s in manifest["sections"] if s["role"] == "core"}
+    return [s for s in all_sections if s["number"] in core_numbers]
+
+
 def verify_pack(markdown_text: str, manifest: dict, language: str) -> dict:
     """Verify an exported pack: the core is untouched and every annex section landed.
 
@@ -152,10 +167,12 @@ def verify_pack(markdown_text: str, manifest: dict, language: str) -> dict:
       (a hash comparison alone would not have caught the latter, since the
       corrupted section is neither core nor byte-identical to anything
       previously locked).
+
+    Verifies from the markdown export, never the docx — docx is shipped to
+    the reader, but its text is not what gets hashed.
     """
     all_sections = sections_module.parse_sections(markdown_text)
-    core_numbers = {s["number"] for s in manifest["sections"] if s["role"] == "core"}
-    core_sections = [s for s in all_sections if s["number"] in core_numbers]
+    core_sections = extract_core_sections(markdown_text, manifest)
 
     lock_data = corelock.load_lock(manifest["core_version"], language)
     core_result = corelock.verify(core_sections, lock_data)
@@ -172,6 +189,7 @@ def verify_pack(markdown_text: str, manifest: dict, language: str) -> dict:
         "passed": core_result["passed"] and not unlocalised,
         "core": core_result,
         "unlocalised_annex_sections": unlocalised,
+        "exported_core_sections": core_sections,
     }
 
 
