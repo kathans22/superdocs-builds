@@ -20,6 +20,10 @@ class LedgerEntry:
     content_key: str | None = None
 
 
+class OperationCeilingExceeded(RuntimeError):
+    """Raised when a run's charged operations exceed the configured ceiling."""
+
+
 class Ledger:
     """The run's cost record: one entry per step, operations charged, wall time.
 
@@ -66,6 +70,21 @@ class Ledger:
         return any(
             e.content_key == content_key and e.status == "CHARGED" for e in self.entries
         )
+
+    def enforce_ceiling(self, ceiling: int | None) -> None:
+        """Abort the run if operations charged so far exceed `ceiling`.
+
+        Checked by the caller after each record() during a run, not just at
+        the end — the point is to stop mid-run before further operations are
+        spent, not to report the overrun after the fact.
+        """
+        if ceiling is not None and self.total_operations > ceiling:
+            raise OperationCeilingExceeded(
+                f"Operations charged ({self.total_operations}) exceeded the configured "
+                f"ceiling ({ceiling}). Fix: raise the ceiling if this run is expected "
+                "to cost more, or stop and investigate why more operations were "
+                "charged than planned."
+            )
 
     @property
     def total_operations(self) -> int:
@@ -114,3 +133,20 @@ def _format_line(tag: str, subject: str, operations: int, status: str, label_is_
         ops_text = f"SKIPPED ({ops_text})"
     pad = max(1, _LINE_WIDTH - len(label) - len(ops_text))
     return f"{label}{' ' * pad}{ops_text}"
+
+
+def apply_limit(countries: list, limit: int | None) -> list:
+    """Small-sample mode: return only the first `limit` countries, or all of them."""
+    if limit is None:
+        return list(countries)
+    return list(countries)[:limit]
+
+
+def parse_limit(argv: list[str]) -> int | None:
+    """Extract an integer --limit N (or --limit=N) value from a CLI argument list."""
+    for i, arg in enumerate(argv):
+        if arg == "--limit" and i + 1 < len(argv):
+            return int(argv[i + 1])
+        if arg.startswith("--limit="):
+            return int(arg.split("=", 1)[1])
+    return None
