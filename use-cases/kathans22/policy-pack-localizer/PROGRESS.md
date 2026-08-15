@@ -403,3 +403,118 @@ sixth field to five YAML files for a string that would just repeat those two val
 `return_address` is derived as `f"{office}, {country}"`. If a real postal address is ever
 needed, it is a one-field addition to each country YAML, consistent with "adding a country
 (or a field) is a data change."
+
+## Phase 6 — Amendment (Session 7, Prompts 18–21)
+
+The hardest requirement, and the one that most distinguishes the build: a core amendment
+must produce a per-country change notice, not a full reissue, and cost like an update.
+
+**Prompt 18 — section-level diff.** Amended `config/policy-master.md` section 4 to add an
+explicit 24-hour reporting deadline; archived the pre-amendment text at
+`config/policy-master-v1.md` (both versions kept, so a notice can quote either); bumped
+`manifest.yaml`'s `core_version` to 2. `amend.diff_core_versions(manifest, language,
+from_version, to_version)` compares only the persisted locked hashes (zero SuperDocs
+calls) and `format_diff_report()` produces the required `"Section 4 changed, 1 of 5.
+Sections 1, 2, 3, 5 unchanged."` — verified live against the real v1/v2 English locks.
+
+One logged observation: v1's section 4 already named volunteers and contractors in the
+duty-to-report clause, so that part of the requested amendment was already true before
+this edit; the substantive new content is the 24-hour deadline itself.
+
+**Prompt 19 — changed-section re-translation.** `amend.retranslate_changed_sections`
+re-translates only the changed section(s) per affected language, carrying every unchanged
+section forward byte for byte from the v1 lock's persisted verbatim text (never
+re-translated — re-translating unchanged text would produce different bytes for identical
+meaning and silently break the identity guarantee). One correction made from live testing:
+the diff passed in must come from the SOURCE language, never the target language itself,
+because a target language's v2 lock does not exist until this function creates it. Live
+proof for French: sections 1, 2, 3, 5 byte-identical between v1 and v2 locks; section 4
+changed; 1 operation charged. 8 tests in `tests/test_amend.py` cover this, including a
+fake-client proof that the instruction sent to SuperDocs names only the changed section.
+
+**Prompt 20 — per-country change notices.** `amend.generate_change_notice` builds the
+deterministic skeleton (header, the notice's own summary line — deliberately different
+wording from Prompt 18's `format_diff_report`, since this prompt specified different exact
+text — quoted previous/new text pulled verbatim from locked/archived text, action required
+with a computed return date, and an unconditional annexes-6–9-unchanged line, all in the
+office's working language). `amend.send_change_notice` is the one billed step: it fills a
+single placeholder paragraph with a plain-language "what changed" summary via one chat
+call, verifies afterward that the placeholder is gone AND that every quoted before/after
+section body still matches the locked/archived text verbatim (normalised) — never trusting
+the response text. Live proof for Mumbai and Senegal in `evidence/notice-generation-report.md`.
+
+**A real defect surfaced live, fixed in code, not worked around by hand:** a notice's
+single billed chat call can come back billed (`usage.was_billable: true, ops_charged: 1`)
+with a confused non-edit response (*"I am not sure how to help you..."*) and `changes:
+null` — the exact same class of "billed but nothing changed" unreliability already
+documented for pack-generation batches in `evidence/superdocs-batch-limit-report.md`, now
+confirmed on a single-section document call, so it is not a batching-specific defect.
+`send_change_notice` retries once (`_MAX_NOTICE_ATTEMPTS = 2`), checking the *export*
+after each attempt, never the response text; a notice needing a retry honestly costs 2
+operations, not the idealised 1 — the ledger records what happened, not an assumed
+constant. Observed live for Mumbai (2 ops) and, in Prompt 21's full run, Nairobi (2 ops).
+
+**Prompt 21 — re-lock, re-verify, Run 2 table.** `service.relock_v2` re-locks the core at
+v2 across every language a configured country uses: the source language directly (0 ops),
+every other language via `retranslate_changed_sections` (1 op the first time, 0 on rerun —
+proven idempotent live with an `ExplodingClient` that would fail the test if any network
+call were attempted). Portuguese was re-translated live in this prompt (French was already
+done in Prompt 19); section 4 changed, sections 1/2/3/5 byte-identical to v1, exactly as
+French showed.
+
+`service.verify_after_amendment` re-verifies all five packs and confirms annexes are
+untouched **without reissuing any pack**: each pack is checked against `from_version` (v1
+— the version it was actually generated at), never the new `to_version`, because no pack
+is reissued by an amendment. All five pass; all five have zero unlocalised annex sections.
+Separately, the newly re-locked v2 core is checked for cross-language structural
+consistency — `diff_core_versions` for en/fr/pt must each report the same
+changed/unchanged split as the source-language diff — confirmed for all three.
+
+**The Run 2 ledger, real and complete** (`evidence/run2-ledger.md`,
+`evidence/run2-integrity-report.json`): all five change notices were generated live
+(IN, SN in Prompt 20; KE, FR, BR completing the set in Prompt 21). Two needed a retry (IN,
+KE); SN, FR, BR landed on the first attempt. Real total: **9 operations** (2 re-translations
++ 7 notice-generation calls), against the idealised **7** (2 + 5) — the same 2-op overrun
+pattern as Phase 4's pack generation, same root cause (live SuperDocs edit-call
+unreliability), now measured precisely because every call in this run was made and recorded
+in this session.
+
+**Run 1 vs. Run 2 — the equivalence the build exists to demonstrate**, idealised model:
+
+| | Run 1 — full rollout | Run 2 — core amendment |
+|---|---|---|
+| Scope | 5 countries, 3 languages, 5 packs | Same 5 countries, 3 languages, **0 packs reissued** |
+| Operations | 2 translations + 5 packs × 1 = **7** | 2 re-translations + 5 notices = **7** |
+| What ships | 5 full policy packs | 5 short (2–3 page) change notices |
+
+Both real runs exceeded their idealised figures for the same reason — live SuperDocs
+chat-edit calls do not reliably apply on the first attempt, and a failed attempt can still
+be billed. Run 1's real total was never cleanly isolated (see `evidence/ledger-summary.md`
+— only a 5-op remediation round was itemised at full precision; the account's promo
+counter dropped 36 ops across a session that also included unrelated prior experiments).
+Run 2's real total (9 ops) **is** cleanly isolated, because every call in Prompts 19–21 was
+made and recorded within this session. The idealised 7-vs-7 equivalence is the number to
+put in the README; the real, itemised 9-op Run 2 total belongs beside it as the honest
+"what it actually cost, including the flakiness tax."
+
+**Fragile in the amendment path — logged, not hidden:**
+
+1. **A notice's billed chat call can silently fail** (billed, `changes: null`, a confused
+   response) — the same defect class as pack batches, now confirmed present outside
+   batching too. Mitigated by bounded retry + export-based verification, never by trusting
+   the response. Not eliminated: a notice could in principle exhaust `_MAX_NOTICE_ATTEMPTS`
+   and raise `NoticeIntegrityError`, quarantining that one country's notice rather than
+   shipping a broken one.
+2. **Independent translation calls for the same clause can drift in wording even when the
+   underlying English is unchanged.** Observed live in Brazil's notice: the pt v1 lock
+   (translated in Phase 4) renders one clause as *"idade de consentimento local"*; the pt
+   v2 lock (translated fresh in Prompt 19, since section 4 changed) renders the same
+   English clause as *"idade legal de consentimento local"* — a cosmetic difference, not a
+   substantive one, since the English source is byte-identical there. The model's
+   plain-language summary for BR's notice ("...e especifica a idade legal de
+   consentimento") is grounded in the literal displayed text delta, but could read to an
+   office as if that rule changed, when only the wording of an already-true rule did. This
+   is a known limitation of section-level (not clause-level) re-translation with a
+   non-deterministic translator, not a bug in any single translation call. Not fixed in
+   this session — would need either clause-level diffing or an explicit instruction to the
+   summary call to ignore purely cosmetic wording differences.
