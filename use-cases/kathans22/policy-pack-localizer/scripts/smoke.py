@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from localizer.ledger import Ledger
+from localizer.ledger import Ledger, ops_from_response
 from localizer.mcp_client import SuperDocsClient, SuperDocsClientError, parse_proposed_changes
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,17 +25,6 @@ EDIT_INSTRUCTION = (
     "are Childline India (1098, toll-free 24-hour child helpline) and the Police "
     "Control Room (112). Do not touch any other section."
 )
-
-
-def _ops_charged(response: dict) -> int:
-    """SuperDocs only bills a chat call that actually applies a change — a
-    preview call (approval_mode='ask_every_time') comes back with usage=null.
-    Charge exactly what the response says was billed, not an assumed constant.
-    """
-    usage = response.get("usage") or {}
-    if usage.get("was_billable"):
-        return usage.get("ops_charged") or 1
-    return 0
 
 
 def _extract_section(markdown: str, number: int) -> str:
@@ -60,7 +49,7 @@ async def run() -> None:
         )
         ledger.record(
             "chat", "section 6 edit (preview)",
-            chat_calls=_ops_charged(review_response), wall_time=time.monotonic() - started,
+            chat_calls=ops_from_response(review_response), wall_time=time.monotonic() - started,
         )
 
         changes = parse_proposed_changes(review_response)
@@ -94,7 +83,7 @@ async def run() -> None:
             )
             ledger.record(
                 "chat", "section 6 edit (apply)",
-                chat_calls=_ops_charged(apply_response), wall_time=time.monotonic() - started,
+                chat_calls=ops_from_response(apply_response), wall_time=time.monotonic() - started,
             )
 
         started = time.monotonic()

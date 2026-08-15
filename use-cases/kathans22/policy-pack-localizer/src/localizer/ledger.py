@@ -24,13 +24,32 @@ class OperationCeilingExceeded(RuntimeError):
     """Raised when a run's charged operations exceed the configured ceiling."""
 
 
+def ops_from_response(response: dict) -> int:
+    """Operations actually billed for one chat response, per its own `usage` field.
+
+    SuperDocs does not bill a chat call uniformly: a preview-only call
+    (`approval_mode='ask_every_time'`, nothing applied yet) comes back with
+    `usage: null` — free. Only a call that actually applies a change comes
+    back with `usage.was_billable: true` and a real `ops_charged`. Charging
+    a flat 1 per chat call (the original assumption here) overcounts every
+    preview. Callers computing `chat_calls` for `record()` should pass this,
+    not a hardcoded constant.
+    """
+    usage = response.get("usage") or {}
+    if usage.get("was_billable"):
+        return usage.get("ops_charged") or 1
+    return 0
+
+
 class Ledger:
     """The run's cost record: one entry per step, operations charged, wall time.
 
-    Charging follows CLAUDE.md's economics section: a chat call is 1 operation;
-    everything else (lock/hash, upload, export, download, ack rendering) is 0.
-    Callers report the number of chat calls a step made via `chat_calls` —
-    that count is exactly what gets charged.
+    Charging follows CLAUDE.md's economics section: a chat call that actually
+    applies a change is 1 operation; everything else (lock/hash, upload,
+    export, download, ack rendering, and a preview-only chat call) is 0.
+    Callers report the number of operations a step actually spent via
+    `chat_calls` — see `ops_from_response()` to derive that from a real
+    SuperDocs response rather than assuming a constant.
     """
 
     def __init__(self):
