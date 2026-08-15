@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import difflib
 import re
 import time
 from pathlib import Path
@@ -204,6 +205,79 @@ def verify_pack(markdown_text: str, manifest: dict, language: str) -> dict:
     }
 
 
+def _master_core_sections(manifest: dict) -> dict[int, dict]:
+    master_sections = sections_module.parse_sections(POLICY_MASTER_PATH.read_text(encoding="utf-8"))
+    core_numbers = {s["number"] for s in manifest["sections"] if s["role"] == "core"}
+    return {s["number"]: s for s in master_sections if s["number"] in core_numbers}
+
+
+def _word_diff(expected: str, actual: str) -> str:
+    """A compact word-level diff.
+
+    A core section is a single long paragraph with no internal line breaks,
+    so a line-level diff would just print the whole paragraph twice with
+    nothing visually marking what changed. Diffing word-by-word instead
+    shows only the words that actually differ.
+    """
+    expected_words = expected.split()
+    actual_words = actual.split()
+    matcher = difflib.SequenceMatcher(None, expected_words, actual_words)
+    changes = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        removed = " ".join(expected_words[i1:i2])
+        added = " ".join(actual_words[j1:j2])
+        if removed:
+            changes.append(f"  - {removed!r}")
+        if added:
+            changes.append(f"  + {added!r}")
+    return "\n".join(changes) if changes else "  (no word-level difference found)"
+
+
+def format_verification_report(
+    verification: dict, manifest: dict, country_code: str, quarantine_path: Path
+) -> str:
+    """Name what failed, and show a diff for every diverged core section.
+
+    The lock (corelock.lock()) stores only hashes, not text, so there is
+    nothing in it to diff against. The diff instead compares the exported
+    section to policy-master.md's core section — the exact text the hash
+    was originally computed from — normalised through the same normalise()
+    the hash comparison itself used, so the diff shows only what could have
+    caused the mismatch, not incidental formatting noise.
+    """
+    core = verification["core"]
+    lines = [
+        f"{country_code} pack failed verification and was quarantined to {quarantine_path} "
+        "— not exported, and this run does not report success for this country."
+    ]
+
+    if core["diverged_sections"]:
+        master_by_number = _master_core_sections(manifest)
+        exported_by_number = {s["number"]: s for s in verification["exported_core_sections"]}
+        for number in core["diverged_sections"]:
+            expected = corelock.normalise(master_by_number[number]["body"])
+            exported_section = exported_by_number.get(number)
+            if exported_section is None:
+                lines.append(f"\nSection {number} diverged from the lock: section missing from export.")
+                continue
+            actual = corelock.normalise(exported_section["body"])
+            lines.append(f"\nSection {number} diverged from the lock:\n{_word_diff(expected, actual)}")
+
+    if core["missing_sections"]:
+        lines.append(f"\nCore sections missing from the export: {core['missing_sections']}")
+    if core["unexpected_sections"]:
+        lines.append(f"\nUnexpected core-numbered sections in the export: {core['unexpected_sections']}")
+    if verification["unlocalised_annex_sections"]:
+        lines.append(
+            "\nAnnex sections still carrying the master's unedited placeholder text: "
+            f"{verification['unlocalised_annex_sections']}"
+        )
+
+    return "\n".join(lines)
+
+
 def _content_key(country_code: str, core_version: int) -> str:
     return f"pack:{country_code}:v{core_version}"
 
@@ -377,10 +451,7 @@ async def generate_pack(
                 "markdown",
             )
             raise PackIntegrityError(
-                f"{country_code} pack failed verification and was quarantined to "
-                f"{quarantine_path} — core: {verification['core']}, "
-                f"unlocalised annex sections: {verification['unlocalised_annex_sections']}. "
-                "Not exported to out/; the run does not report success for this country."
+                format_verification_report(verification, manifest, country_code, quarantine_path)
             )
 
         markdown_filename = next(filename for fmt, filename in _EXPORT_FILES if fmt == "markdown")
