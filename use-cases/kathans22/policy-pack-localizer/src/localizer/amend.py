@@ -41,6 +41,10 @@ _NOTICE_LABELS = {
             "using this office's acknowledgement form."
         ),
         "return_by": "Return the acknowledgement below by {date}.",
+        "annexes_unchanged": (
+            "Your annexes (6–9) are unchanged. Your reporting channels and escalation "
+            "path are as before."
+        ),
     },
     "fr": {
         "title": "Avis de modification",
@@ -55,6 +59,10 @@ _NOTICE_LABELS = {
             "confirmez la réception à l'aide du formulaire d'accusé de réception de ce bureau."
         ),
         "return_by": "Retournez l'accusé de réception ci-dessous avant le {date}.",
+        "annexes_unchanged": (
+            "Vos annexes (6 à 9) sont inchangées. Vos canaux de signalement et votre "
+            "parcours d'escalade restent les mêmes qu'auparavant."
+        ),
     },
     "pt": {
         "title": "Aviso de Alteração",
@@ -69,6 +77,10 @@ _NOTICE_LABELS = {
             "recebimento usando o formulário de comprovante deste escritório."
         ),
         "return_by": "Devolva o comprovante de recebimento abaixo até {date}.",
+        "annexes_unchanged": (
+            "Seus anexos (6 a 9) permanecem inalterados. Seus canais de denúncia e "
+            "seu caminho de escalonamento são os mesmos de antes."
+        ),
     },
 }
 
@@ -453,12 +465,22 @@ def generate_change_notice(
     the date, the notice's summary line (_format_notice_change_summary),
     every changed section's heading with its previous and new text quoted
     VERBATIM (never model-generated — pulled from locked/archived text via
-    _core_sections_at, the same text corelock already hash-verified), and
-    the action required with a return date. Known fields and known text
-    into a known structure, no ambiguity for a model to resolve — the same
-    reasoning ack.py already applies to the acknowledgement form. The one
-    genuinely interpretive piece (a plain-language "what changed" summary)
-    is left as a placeholder here, filled in by the single billed
+    _core_sections_at, the same text corelock already hash-verified), the
+    action required with a return date, and an explicit line confirming
+    annexes 6–9 are unchanged. Known fields and known text into a known
+    structure, no ambiguity for a model to resolve — the same reasoning
+    ack.py already applies to the acknowledgement form.
+
+    The annexes-unchanged line is not decoration: it is what lets an
+    office trust that the notice is complete rather than silent about
+    something that also moved — the same instinct as the core-identity
+    attestation (corelock.verify), just stated in words instead of a hash.
+    It is unconditional here because a change notice, by construction,
+    only ever exists for a core amendment (diff_core_versions compares
+    core sections only) — annexes 6–9 are never in scope for one.
+
+    The one genuinely interpretive piece (a plain-language "what changed"
+    summary) is left as a placeholder here, filled in by the single billed
     SuperDocs call layered on top of this function.
     """
     country = (
@@ -507,6 +529,8 @@ def generate_change_notice(
         "",
         labels["action_body"],
         labels["return_by"].format(date=return_date),
+        "",
+        labels["annexes_unchanged"],
         "",
     ]
     return "\n".join(lines)
