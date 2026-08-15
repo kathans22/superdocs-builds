@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import re
 import time
 from pathlib import Path
 
@@ -80,6 +81,28 @@ def build_instruction(manifest: dict, country: dict) -> str:
     return "\n".join(lines)
 
 
+_SECTION_MENTION_RE = re.compile(r"\bsection\s+(\d+)\b", re.IGNORECASE)
+
+
+def assert_no_core_sections_named(instruction: str, manifest: dict) -> None:
+    """Raise if a core section number is named anywhere in an outbound instruction.
+
+    Core sections are never named in any instruction sent to SuperDocs — that
+    is the intent half of the core's protection (CLAUDE.md rule 3); the hash
+    check in corelock.verify after export is the enforcement half. This is a
+    hard stop, not a warning: a violating instruction is never sent.
+    """
+    core_numbers = {s["number"] for s in manifest["sections"] if s["role"] == "core"}
+    named_numbers = {int(match) for match in _SECTION_MENTION_RE.findall(instruction)}
+    violating = sorted(named_numbers & core_numbers)
+    if violating:
+        raise ValueError(
+            f"Instruction names core section number(s) {violating} — core sections "
+            "must never be named in an instruction sent to SuperDocs. This is a bug "
+            "in the instruction builder; the call is not sent."
+        )
+
+
 async def generate_pack(
     country_code: str,
     *,
@@ -108,6 +131,7 @@ async def generate_pack(
     )
 
     instruction = build_instruction(manifest, country)
+    assert_no_core_sections_named(instruction, manifest)
 
     session_id = f"pack-{country_code.lower()}"
     file_base64 = base64.b64encode(POLICY_MASTER_PATH.read_bytes()).decode("ascii")

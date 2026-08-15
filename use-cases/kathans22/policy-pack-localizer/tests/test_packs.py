@@ -76,6 +76,49 @@ class _FakeSuperDocsClient:
         return {"text": "exported markdown"}
 
 
+def test_assert_no_core_sections_named_passes_a_real_annex_instruction():
+    manifest, country = _manifest_and_country()
+    instruction = packs.build_instruction(manifest, country)
+
+    packs.assert_no_core_sections_named(instruction, manifest)  # must not raise
+
+
+def test_assert_no_core_sections_named_raises_when_a_core_section_is_named():
+    manifest, _ = _manifest_and_country()
+    violating_instruction = 'Also rewrite Section 4 "Prohibited Conduct" while you are at it.'
+
+    try:
+        packs.assert_no_core_sections_named(violating_instruction, manifest)
+        raised = False
+    except ValueError as exc:
+        raised = True
+        assert "4" in str(exc)
+    assert raised
+
+
+def test_generate_pack_never_sends_a_core_section_number_to_the_client():
+    manifest, country = _manifest_and_country()
+    ledger = Ledger()
+    fake_client = _FakeSuperDocsClient()
+
+    asyncio.run(
+        packs.generate_pack(
+            "IN",
+            ledger=ledger,
+            manifest=manifest,
+            country=country,
+            client_factory=lambda: fake_client,
+        )
+    )
+
+    core_numbers = {s["number"] for s in manifest["sections"] if s["role"] == "core"}
+    for name, kwargs in fake_client.calls:
+        if name != "chat":
+            continue
+        named = {int(m) for m in packs._SECTION_MENTION_RE.findall(kwargs["message"])}
+        assert not (named & core_numbers)
+
+
 def test_generate_pack_sends_one_batched_chat_instruction_and_charges_one_operation():
     manifest, country = _manifest_and_country()
     ledger = Ledger()
