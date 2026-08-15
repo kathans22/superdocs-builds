@@ -17,3 +17,23 @@ MRT prohibits all forms of sexual exploitation, sexual abuse, and harassment by 
 ## 5 Duty to Report
 
 Every person covered by this policy has an affirmative duty to report any concern, suspicion, or disclosure of a safeguarding violation as soon as they become aware of it. Reports should be made through the channels described in Section 6 and must never be investigated informally or independently by the person who receives them. MRT does not require certainty before a report is made — a genuine, good-faith concern is sufficient, and MRT would rather receive and screen out a mistaken report than lose one that turns out to be substantiated. Retaliation of any kind against a person who makes a report in good faith is itself a disciplinary offence, and MRT commits to protecting the confidentiality of anyone who raises a concern to the fullest extent consistent with a fair and effective investigation. Reports involving children are subject to mandatory referral to statutory child protection authorities where local law requires it. Managers and Safeguarding Focal Points who receive a report are personally responsible for escalating it within twenty-four hours and may not decide unilaterally that a report does not warrant escalation. This duty applies equally to concerns about MRT's own staff and to concerns about partner or contractor personnel.
+
+## 6 Reporting Channels
+
+Concerns may be raised with a line manager, the office Safeguarding Focal Point, or the confidential reporting line.
+Country-specific contact details, hotline numbers, and languages are listed in the annex for this office.
+
+## 7 Applicable Law
+
+This policy operates alongside the mandatory reporting and child protection law of the country in which MRT operates.
+Country-specific legal references are listed in the annex for this office.
+
+## 8 Escalation and Response
+
+Reports are triaged, investigated, and resolved under MRT's standard safeguarding case-management procedure.
+Country-specific escalation contacts and response timeframes are listed in the annex for this office.
+
+## 9 Acknowledgement
+
+By signing below, I confirm that I have read, understood, and agree to comply with this policy.
+Country-specific acknowledgement fields are provided in the annex for this office.
