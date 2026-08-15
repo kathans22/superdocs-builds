@@ -291,3 +291,84 @@ literally could reintroduce a false "not landed" retry loop or, worse, a false-p
 section that only had content appended around an intact placeholder. Worth hardening later
 (e.g. checking the placeholder no longer appears as the section's *entire* content, not just
 checking it as a substring) — not done now, out of this prompt's scope.
+
+## Phase 4 — Translation and multi-language (Session 5, Prompts 14–16)
+
+**Prompt 14** implemented `translate.derive_core(language)`: derives, hashes, and locks a
+language's translated core exactly once, cached by `(core_version, language)`. The
+translation instruction is the one legitimate place in the codebase that names core
+sections — structurally isolated by never importing `packs.py`, so `packs.assert_no_core_sections_named`
+can never see it. The lock file gained a `sections` key holding the verbatim translated
+text (heading + body per section), alongside the existing hashes, so a later pack can insert
+the translated core without ever re-translating it.
+
+**Prompt 15** extended `packs.py` so a non-English country's pack is assembled from that
+language's locked core (verbatim, via `_assemble_upload_document`) plus its own annexes, with
+`_assert_core_verbatim` proving the match locally before any SuperDocs call is made. FR and
+SN — two French-speaking countries with entirely different annexes — were built and their
+core hashes compared: identical, as required.
+
+**Prompt 16** ran all five countries live (IN, KE, FR, SN, BR) to a genuinely clean, verified
+state and produced `evidence/integrity-report.json`.
+
+**What "clean" actually took.** The first pass through every non-trivial annex batch/fix-up
+call surfaced defects beyond the partial-batch behaviour already documented in
+`evidence/superdocs-batch-limit-report.md`:
+
+- A batch reporting full success while leaving part of a multi-sentence placeholder attached
+  before or after the new localised text (FR §6/§8/§9, SN §6/§7/§8, IN §6/§8/§9 all showed
+  this — the master's placeholder sentence surviving verbatim alongside real content).
+- A batch editing the wrong chunk entirely — writing new content into the `<h2>` **heading**
+  chunk instead of the `<p>` **body** chunk, corrupting the heading while leaving the body's
+  placeholder untouched (BR §6/§7, observed live).
+- A "concurrent edit notice" (`concurrent_merges`) appearing on at least one retry, indicating
+  cross-request interference on the same document; the affected edit (KE §7) still needed a
+  second pass afterward because the merge silently reverted it despite the response reporting
+  success.
+- Natural-language `chat()` instructions repeatedly failing to touch a corrupted **heading**
+  specifically (`"nothing actually changed"`, 0 ops charged, three separate attempts on BR),
+  even when the exact chunk id was named. What reliably worked instead: fetching the current
+  full document HTML and re-submitting it via `chat(document_html=...)` as a verbatim
+  replacement (the tool's documented "load, don't retype" path) rather than asking the AI to
+  edit in place — 0 ops charged each time, since it is a document load, not an AI edit.
+
+All five packs were brought to a verified-clean state this way and re-exported. Locally
+re-running `packs.verify_pack` against every exported markdown (not the chat response)
+confirms:
+
+```
+IN en passed=True unlocalised=[] core_hash_match=True
+KE en passed=True unlocalised=[] core_hash_match=True
+FR fr passed=True unlocalised=[] core_hash_match=True
+SN fr passed=True unlocalised=[] core_hash_match=True
+BR pt passed=True unlocalised=[] core_hash_match=True
+```
+
+**The three real core hashes** (`evidence/integrity-report.json`, `core_identity`):
+
+- en (IN, KE): `aa3a7460e6602b04e59acbe8ef73be464c3951624b50903a61b548ce64e186e8`
+- fr (FR, SN): `a240052d992b3f53af2332edd0ffe62172b87e6a963c3c8dd4dfef4d47dafa58`
+- pt (BR): `4d339a737d5ea69c3bfd38ee983f779243c219ba869e1e9df443bb98ef7cf9b8`
+
+FR and SN's identical hash — two French-speaking countries, two entirely different annexes,
+one identical locked core — is the demo's central proof, now verified from five real,
+independently-generated exports, not asserted.
+
+**Annex divergence**, counted (not claimed) across the same normalisation `corelock` uses:
+`reporting`: 5 distinct, `legal`: 5 distinct, `escalation`: 5 distinct — every one of the five
+countries' three non-acknowledgement annex slots is genuinely unique content.
+
+**Translation quality vs. annex-editing completeness — kept separate, deliberately.** The
+translated CORE text itself (fr and pt, from `translate.derive_core`) read as accurate,
+idiomatic legal French and Portuguese on inspection — no quality concerns there. The defects
+above were entirely in ANNEX EDITING completeness and precision (partial replacements,
+wrong-chunk edits, a reverted concurrent merge), not in translation. KE (English throughout,
+no translation involved at all) needed the same class of remediation as FR/SN/BR, which
+confirms the defects are a `chat()`-edit reliability issue, not a translation-quality one.
+
+**Operations.** Full itemisation and the honest total (well above both the user's stated
+7-op expectation and CLAUDE.md's own idealised 12-op full-rollout figure — annotated with
+why) is in `evidence/ledger-summary.md`, not duplicated here. In short: the idealised model
+prices a pack at 2 ops (one per annex batch); the real run cost more per pack because
+recovering from the defects above took extra `chat()` turns per affected country before
+`verify_pack` could honestly report every section clean.
