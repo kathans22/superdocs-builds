@@ -9,11 +9,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from . import amend as amend_module
 from . import config as config_module
 from . import corelock
 from . import packs
 from . import sections as sections_module
 from .ledger import Ledger, apply_limit
+from .mcp_client import SuperDocsClient
 
 
 def lock_core(manifest: dict | None = None, language: str | None = None) -> dict:
@@ -32,6 +34,48 @@ def lock_core(manifest: dict | None = None, language: str | None = None) -> dict
     lock_data = corelock.lock(core_sections, manifest["core_version"], language)
     corelock.save_lock(lock_data)
     return lock_data
+
+
+async def relock_v2(
+    *,
+    manifest: dict | None = None,
+    ledger: Ledger | None = None,
+    client_factory=SuperDocsClient,
+) -> dict:
+    """Re-lock the core at manifest['core_version'] across every language a
+    configured country actually uses — the source language directly
+    (lock_core, 0 ops, arithmetic), every other language via
+    amend.retranslate_changed_sections (1 op the first time a language is
+    re-locked at this version, 0 thereafter — idempotent per (language,
+    from_version, to_version), so a language already re-locked in an
+    earlier run costs nothing here).
+
+    Zero packs are touched. This only produces
+    state/core-lock-v{to_version}-{lang}.json files — the same artifact
+    lock_core has always produced for the source language, now derived for
+    every other language too. Generating a pack from this lock is a
+    separate, later decision (packs.generate_pack); this function makes no
+    such decision.
+    """
+    manifest = manifest if manifest is not None else config_module.load_manifest()
+    ledger = ledger if ledger is not None else Ledger()
+    source_language = manifest["source_language"]
+    to_version = manifest["core_version"]
+    from_version = to_version - 1
+
+    lock_core(manifest=manifest)  # source language, 0 ops
+    diff = amend_module.diff_core_versions(manifest, source_language, from_version, to_version)
+
+    countries = config_module.load_all_countries()
+    other_languages = sorted({c["language"] for c in countries.values()} - {source_language})
+
+    locks = {source_language: corelock.load_lock(to_version, source_language)}
+    for language in other_languages:
+        locks[language] = await amend_module.retranslate_changed_sections(
+            manifest, language, diff, ledger=ledger, client_factory=client_factory
+        )
+
+    return {"diff": diff, "locks": locks}
 
 
 async def generate(
