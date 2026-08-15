@@ -44,14 +44,22 @@ Sections 1–5 CORE · 6–9 ANNEX (6 reporting, 7 legal, 8 escalation, 9 acknow
   in a trial — see the evidence file for why.
 - Acknowledgement form: **0 ops**
 - Upload, export, download: **0 ops**
-- Change notice per country: **1 op** — a single-document call, unlike a pack's multi-section
-  batch.
+- Change notice per country: **1 op** on a clean landing — a single-document call, unlike a
+  pack's multi-section batch. Live testing (Prompts 20–21, `evidence/run2-ledger.md`) showed
+  the same "billed but nothing changed" failure SuperDocs exhibits on annex batches also
+  occurs on this single call: a confused non-edit response, `changes: null`, still billed.
+  `send_change_notice` never trusts the response — it verifies the export and retries once
+  (bounded) — so a notice needing a retry honestly costs **2 ops**, not 1. Two of five did,
+  live, in the real Run 2.
 - Re-translate a changed section: **1 op per affected language**, not per country
 
 Full rollout, 5 countries / 3 languages: **12 ops** (2 translations + 5 packs × 2). Core
-amendment reaching all 5: **7 ops** (2 re-translations + 5 notices). An update costs like an
-update — the amendment run stays 7 regardless of the pack-generation cost above it, because a
-change notice is a single-document call, not a batched multi-section one.
+amendment reaching all 5: **7 ops** idealised (2 re-translations + 5 notices) — the real,
+fully-itemised Run 2 cost **9 ops**, because 2 of the 5 notice calls needed the retry above
+(`evidence/run2-ledger.md`). An update still costs like an update, not like a reissue: zero
+packs were regenerated either way, and the 7-vs-7 idealised equivalence against Run 1 is the
+comparison that matters — the +2 is the same live-flakiness tax paid throughout this build,
+not a batching cost creeping back in.
 
 ## Non-negotiable engineering rules
 
