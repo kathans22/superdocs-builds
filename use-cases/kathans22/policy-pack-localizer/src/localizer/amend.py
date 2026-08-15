@@ -46,3 +46,38 @@ def diff_core_versions(manifest: dict, language: str, from_version: int, to_vers
         "changed_sections": changed_sections,
         "unchanged_sections": unchanged_sections,
     }
+
+
+def _join_numbers(numbers: list[int]) -> str:
+    return ", ".join(str(n) for n in numbers)
+
+
+def format_diff_report(diff: dict) -> str:
+    """"Section 4 changed, 1 of 5" — and name every section that did not.
+
+    Naming what did NOT change is not decoration: it is what lets a country
+    office trust a change notice built from this diff without re-reading
+    the whole core. `changed_sections` and `unchanged_sections` are already
+    disjoint and exhaustive over every core section (diff_core_versions
+    enforces that every core section lands in exactly one), so this only
+    formats what is already known — no new comparison happens here.
+    """
+    changed = diff["changed_sections"]
+    unchanged = diff["unchanged_sections"]
+    total = diff["core_sections_total"]
+
+    if not changed:
+        return (
+            f"No core sections changed between v{diff['from_version']} and "
+            f"v{diff['to_version']} ({diff['language']}). All {total} unchanged."
+        )
+
+    changed_label = "section" if len(changed) == 1 else "sections"
+    header = (
+        f"{changed_label.capitalize()} {_join_numbers(changed)} changed, "
+        f"{len(changed)} of {total}."
+    )
+    if not unchanged:
+        return header
+
+    return f"{header} Section{'s' if len(unchanged) != 1 else ''} {_join_numbers(unchanged)} unchanged."
