@@ -153,6 +153,19 @@ def extract_core_sections(markdown_text: str, manifest: dict) -> list[dict]:
     return [s for s in all_sections if s["number"] in core_numbers]
 
 
+def compare_core_to_lock(core_sections: list[dict], manifest: dict, language: str) -> dict:
+    """Compare an exported core against the locked hash for this core_version/language.
+
+    Loads the lock corelock.lock() wrote at lock time and recomputes hashes
+    from `core_sections` through the SAME normalise() function — never a
+    second one — so the only thing that can make this fail is a real
+    difference in content, not a difference in how the two sides were
+    canonicalised.
+    """
+    lock_data = corelock.load_lock(manifest["core_version"], language)
+    return corelock.verify(core_sections, lock_data)
+
+
 def verify_pack(markdown_text: str, manifest: dict, language: str) -> dict:
     """Verify an exported pack: the core is untouched and every annex section landed.
 
@@ -173,9 +186,7 @@ def verify_pack(markdown_text: str, manifest: dict, language: str) -> dict:
     """
     all_sections = sections_module.parse_sections(markdown_text)
     core_sections = extract_core_sections(markdown_text, manifest)
-
-    lock_data = corelock.load_lock(manifest["core_version"], language)
-    core_result = corelock.verify(core_sections, lock_data)
+    core_result = compare_core_to_lock(core_sections, manifest, language)
 
     placeholders = _master_annex_placeholders(manifest)
     section_by_number = {s["number"]: s for s in all_sections}
