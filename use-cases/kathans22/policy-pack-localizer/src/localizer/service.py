@@ -78,6 +78,75 @@ async def relock_v2(
     return {"diff": diff, "locks": locks}
 
 
+def verify_after_amendment(
+    country_codes: list[str],
+    *,
+    manifest: dict | None = None,
+    from_version: int | None = None,
+    out_dir: Path = packs.OUT_DIR,
+) -> dict:
+    """Re-verify every pack after a core amendment WITHOUT reissuing any of
+    them, and confirm the newly re-locked core is structurally consistent
+    across every affected language.
+
+    Two independent checks:
+
+    1. Every pack is re-verified against `from_version` — the core_version
+       it was ACTUALLY generated at — never manifest['core_version']
+       (the new one). No pack is reissued by an amendment; that is the
+       entire point of a change notice. A pack passing here (via the
+       existing verify()/packs.verify_pack()) proves its core is exactly
+       what it always was and every annex section is still fully
+       localised — i.e. the amendment touched nothing about any pack.
+       "Confirm annexes are untouched" is this half.
+    2. For every language present among `country_codes`, the just-relocked
+       core at manifest['core_version'] is checked for cross-language
+       consistency: amend.diff_core_versions(manifest, language,
+       from_version, to_version) must report the SAME changed/unchanged
+       section numbers as the source-language diff — proving
+       retranslate_changed_sections correctly carried every unchanged
+       section forward, in every language, not just the one language
+       exercised live when it was first built.
+    """
+    manifest = manifest if manifest is not None else config_module.load_manifest()
+    to_version = manifest["core_version"]
+    from_version = from_version if from_version is not None else to_version - 1
+    pinned_manifest = {**manifest, "core_version": from_version}
+
+    packs_result = {code: verify(code, manifest=pinned_manifest, out_dir=out_dir) for code in country_codes}
+    all_packs_pass = all(r["passed"] for r in packs_result.values())
+    all_annexes_untouched = all(not r["unlocalised_annex_sections"] for r in packs_result.values())
+
+    countries = config_module.load_all_countries()
+    languages_present = sorted({countries[code]["language"] for code in country_codes})
+    source_diff = amend_module.diff_core_versions(
+        manifest, manifest["source_language"], from_version, to_version
+    )
+
+    core_v2_identity = {}
+    for language in languages_present:
+        diff = amend_module.diff_core_versions(manifest, language, from_version, to_version)
+        core_v2_identity[language] = {
+            "changed_sections": diff["changed_sections"],
+            "unchanged_sections": diff["unchanged_sections"],
+            "matches_source": (
+                diff["changed_sections"] == source_diff["changed_sections"]
+                and diff["unchanged_sections"] == source_diff["unchanged_sections"]
+            ),
+        }
+    all_v2_identity_consistent = all(v["matches_source"] for v in core_v2_identity.values())
+
+    return {
+        "from_version": from_version,
+        "to_version": to_version,
+        "packs": packs_result,
+        "all_packs_pass": all_packs_pass,
+        "all_annexes_untouched": all_annexes_untouched,
+        "core_v2_identity": core_v2_identity,
+        "all_v2_identity_consistent": all_v2_identity_consistent,
+    }
+
+
 async def generate(
     country_code: str,
     *,
