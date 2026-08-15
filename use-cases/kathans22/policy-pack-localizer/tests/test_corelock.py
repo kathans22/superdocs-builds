@@ -24,3 +24,34 @@ def test_identical_core_in_two_different_files_produces_identical_hash():
 
     assert lock_a["core_hash"] == lock_b["core_hash"]
     assert lock_a["section_hashes"] == lock_b["section_hashes"]
+
+
+def test_core_edit_changes_only_that_section_and_the_core_hash():
+    core = _core_sections(FIXTURES / "policy_fixture_a.md")
+    baseline = corelock.lock(core, core_version=1, language="en")
+
+    mutated = [dict(s) for s in core]
+    mutated[3] = dict(mutated[3], body=mutated[3]["body"].replace("exploit", "endorse"))
+    changed = corelock.lock(mutated, core_version=1, language="en")
+
+    assert changed["section_hashes"]["4"] != baseline["section_hashes"]["4"]
+    for number in ("1", "2", "3", "5"):
+        assert changed["section_hashes"][number] == baseline["section_hashes"][number]
+    assert changed["core_hash"] != baseline["core_hash"]
+
+
+def test_annex_edit_changes_neither_core_section_hash_nor_core_hash():
+    all_sections = sections.load_sections(FIXTURES / "policy_fixture_a.md")
+    core = [s for s in all_sections if s["number"] <= 5]
+    baseline = corelock.lock(core, core_version=1, language="en")
+
+    mutated_all = [dict(s) for s in all_sections]
+    mutated_all[5] = dict(
+        mutated_all[5], body="An entirely rewritten reporting channel, unrelated to fixture A."
+    )
+    # Section 6 (annex) was rewritten above; the core sections fed to lock() are untouched.
+    core_after_annex_edit = [s for s in mutated_all if s["number"] <= 5]
+    after = corelock.lock(core_after_annex_edit, core_version=1, language="en")
+
+    assert after["core_hash"] == baseline["core_hash"]
+    assert after["section_hashes"] == baseline["section_hashes"]
