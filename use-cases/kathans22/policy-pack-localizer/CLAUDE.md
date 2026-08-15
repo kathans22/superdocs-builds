@@ -34,14 +34,24 @@ Sections 1–5 CORE · 6–9 ANNEX (6 reporting, 7 legal, 8 escalation, 9 acknow
 
 - Lock core: **0 ops** (arithmetic)
 - Translate core per language: **1 op**, cached by `(core_version, language)`
-- Generate a pack: **1 op** — sections 6–9 replaced in ONE batched chat call.
-  Four separate calls would cost four. Batching is deliberate; keep the comment.
+- Generate a pack: **2 ops** — sections 6–9 replaced via `annex_batch_size`-sized batched
+  chat calls (config, default 2 sections/call — see `config/manifest.yaml` and
+  `evidence/superdocs-batch-limit-report.md`). Live testing proved SuperDocs does not
+  reliably apply all four annex sections in one call — a batch can report full success while
+  changing nothing. Each batch is verified against the document, not trusted from the
+  response; a batch that didn't land is split and retried. Two batches of two is the floor
+  proven safe enough to build on; do not hardcode a larger number because it happened to work
+  in a trial — see the evidence file for why.
 - Acknowledgement form: **0 ops**
 - Upload, export, download: **0 ops**
-- Change notice per country: **1 op**
+- Change notice per country: **1 op** — a single-document call, unlike a pack's multi-section
+  batch.
 - Re-translate a changed section: **1 op per affected language**, not per country
 
-Full rollout, 5 countries / 3 languages: **7 ops.** Core amendment reaching all 5: **7 ops.**
+Full rollout, 5 countries / 3 languages: **12 ops** (2 translations + 5 packs × 2). Core
+amendment reaching all 5: **7 ops** (2 re-translations + 5 notices). An update costs like an
+update — the amendment run stays 7 regardless of the pack-generation cost above it, because a
+change notice is a single-document call, not a batched multi-section one.
 
 ## Non-negotiable engineering rules
 
