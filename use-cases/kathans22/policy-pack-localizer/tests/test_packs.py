@@ -1,0 +1,97 @@
+"""Proves pack generation batches the annex edit into one call and costs one operation."""
+
+from __future__ import annotations
+
+import asyncio
+
+from localizer import config as config_module
+from localizer import packs
+from localizer.ledger import Ledger
+from localizer.mcp_client import SuperDocsClientError
+
+
+def _manifest_and_country():
+    manifest = config_module.load_manifest()
+    country = config_module.load_country(config_module.COUNTRIES_DIR / "IN.yaml")
+    return manifest, country
+
+
+def test_build_instruction_batches_every_annex_section_into_one_message():
+    manifest, country = _manifest_and_country()
+
+    instruction = packs.build_instruction(manifest, country)
+
+    for number in (6, 7, 8, 9):
+        assert f"Section {number} " in instruction
+    assert "safeguarding.in@meridian-relief.example" in instruction
+    assert "POCSO" in instruction
+    assert "Regional Director, South Asia" in instruction
+    assert country["office"] in instruction
+
+
+class _FakeSuperDocsClient:
+    """Records every call made against it; mimics the documented API quirk
+
+    that approve_change fails against a synchronous chat() preview.
+    """
+
+    def __init__(self):
+        self.calls: list[tuple[str, dict]] = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc_info):
+        return None
+
+    async def upload(self, **kwargs):
+        self.calls.append(("upload", kwargs))
+        return {"session_id": kwargs.get("session_id")}
+
+    async def chat(self, **kwargs):
+        self.calls.append(("chat", kwargs))
+        if kwargs.get("approval_mode") == "ask_every_time":
+            return {
+                "usage": None,
+                "metadata": {
+                    "pending_changes": [
+                        {
+                            "change_id": "c1",
+                            "operation": "edit",
+                            "chunk_id": "chunk-1",
+                            "old_html": "<p>old</p>",
+                            "new_html": "<p>new</p>",
+                        }
+                    ]
+                },
+            }
+        return {"usage": {"was_billable": True, "ops_charged": 1}}
+
+    async def approve(self, **kwargs):
+        self.calls.append(("approve", kwargs))
+        raise SuperDocsClientError("Job not found (documented fallback path)")
+
+    async def export(self, **kwargs):
+        self.calls.append(("export", kwargs))
+        return {"text": "exported markdown"}
+
+
+def test_generate_pack_sends_one_batched_chat_instruction_and_charges_one_operation():
+    manifest, country = _manifest_and_country()
+    ledger = Ledger()
+    fake_client = _FakeSuperDocsClient()
+
+    result = asyncio.run(
+        packs.generate_pack(
+            "IN",
+            ledger=ledger,
+            manifest=manifest,
+            country=country,
+            client_factory=lambda: fake_client,
+        )
+    )
+
+    chat_calls = [kwargs for name, kwargs in fake_client.calls if name == "chat"]
+    assert len(chat_calls) == 2  # free preview, then the billed fallback apply
+    assert chat_calls[0]["message"] == chat_calls[1]["message"] == result["instruction"]
+    assert ledger.total_operations == 1
