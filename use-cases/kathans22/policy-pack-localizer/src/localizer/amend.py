@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import base64
+import datetime
 import time
+from pathlib import Path
 
 from . import config as config_module
 from . import corelock
@@ -11,12 +13,71 @@ from . import sections as sections_module
 from .ledger import Ledger, ops_from_response
 from .mcp_client import SuperDocsClient, SuperDocsClientError
 
+ROOT = Path(__file__).resolve().parents[2]
 POLICY_MASTER_PATH = config_module.CONFIG_DIR / "policy-master.md"
+OUT_DIR = ROOT / "out"
 
 # Falls back to the raw ISO code when a language isn't listed — adding a
 # language must never require a code change here (CLAUDE.md rule 5); this
 # dict only makes the instruction read naturally for the languages we know.
 _LANGUAGE_NAMES = {"fr": "French", "pt": "Portuguese"}
+
+# Business policy, not a live API characteristic (unlike annex_batch_size) —
+# how long an office has to acknowledge a core amendment. A plain constant
+# is fine here; nothing about it can be discovered by testing SuperDocs.
+_NOTICE_RETURN_WINDOW_DAYS = 14
+
+_NOTICE_LABELS = {
+    "en": {
+        "title": "Change Notice",
+        "office_label": "Office",
+        "date_label": "Date",
+        "what_changed": "What changed:",
+        "action_required": "Action required:",
+        "action_body": (
+            "Review the updated section(s) above with your team and confirm receipt "
+            "using this office's acknowledgement form."
+        ),
+        "return_by": "Return the acknowledgement below by {date}.",
+    },
+    "fr": {
+        "title": "Avis de modification",
+        "office_label": "Bureau",
+        "date_label": "Date",
+        "what_changed": "Ce qui a changé :",
+        "action_required": "Action requise :",
+        "action_body": (
+            "Examinez la ou les sections mises à jour ci-dessus avec votre équipe et "
+            "confirmez la réception à l'aide du formulaire d'accusé de réception de ce bureau."
+        ),
+        "return_by": "Retournez l'accusé de réception ci-dessous avant le {date}.",
+    },
+    "pt": {
+        "title": "Aviso de Alteração",
+        "office_label": "Escritório",
+        "date_label": "Data",
+        "what_changed": "O que mudou:",
+        "action_required": "Ação necessária:",
+        "action_body": (
+            "Revise a(s) seção(ões) atualizada(s) acima com sua equipe e confirme o "
+            "recebimento usando o formulário de comprovante deste escritório."
+        ),
+        "return_by": "Devolva o comprovante de recebimento abaixo até {date}.",
+    },
+}
+
+# Readable, language-appropriate placeholder for the notice's one genuinely
+# interpretive line (the plain-language "what changed" summary) — filled in
+# by the single billed chat call in generate_change_notice. Not a sentinel
+# marker baked into a shipped policy document (CLAUDE.md rule 4 is about
+# policy-master.md); this is internal-draft text in a document this module
+# generates itself, checked afterward the same way packs.py checks its own
+# annex placeholders never survive into a finished export.
+_SUMMARY_PLACEHOLDER = {
+    "en": "Summary pending.",
+    "fr": "Résumé en attente.",
+    "pt": "Resumo pendente.",
+}
 
 
 def diff_core_versions(manifest: dict, language: str, from_version: int, to_version: int) -> dict:
@@ -290,3 +351,76 @@ async def retranslate_changed_sections(
     )
 
     return lock_data
+
+
+def _format_notice_change_summary(diff: dict) -> str:
+    """"1 section changed of 5. Sections 1, 2, 3, 5 unchanged." — the change
+    notice's own summary line.
+
+    Deliberately different wording from format_diff_report's "Section 4
+    changed, 1 of 5." (Prompt 18's general diff report): this prompt asks
+    for this specific phrasing on the notice itself. Both are built from
+    the same `diff`, never re-derived — only the wording differs.
+    """
+    changed = diff["changed_sections"]
+    unchanged = diff["unchanged_sections"]
+    total = diff["core_sections_total"]
+
+    label = "section" if len(changed) == 1 else "sections"
+    header = f"{len(changed)} {label} changed of {total}."
+    if not unchanged:
+        return header
+
+    return f"{header} Section{'s' if len(unchanged) != 1 else ''} {_join_numbers(unchanged)} unchanged."
+
+
+def generate_change_notice(
+    country_code: str,
+    manifest: dict,
+    diff: dict,
+    *,
+    country: dict | None = None,
+    today: datetime.date | None = None,
+) -> str:
+    """Build one country's change notice as markdown: a short document, not
+    a pack — the office reads what moved, not a 40-page reissue.
+
+    This is the deterministic skeleton: office name and code, "core v1 →
+    v2", the date, and the notice's summary line
+    (_format_notice_change_summary). Known fields into a known structure,
+    no ambiguity for a model to resolve — the same reasoning ack.py already
+    applies to the acknowledgement form. Quoting the changed section's
+    previous/new text and the explicit unchanged-annexes line are added on
+    top of this skeleton in later steps; the one genuinely interpretive
+    piece (a plain-language "what changed" summary) is filled in by the
+    single billed SuperDocs call.
+    """
+    country = (
+        country if country is not None
+        else config_module.load_country(config_module.COUNTRIES_DIR / f"{country_code}.yaml")
+    )
+    today = today or datetime.date.today()
+    language = country["language"]
+    labels = _NOTICE_LABELS.get(language, _NOTICE_LABELS["en"])
+    return_date = (today + datetime.timedelta(days=_NOTICE_RETURN_WINDOW_DAYS)).isoformat()
+
+    lines = [
+        f"## {labels['title']}",
+        "",
+        f"**{labels['office_label']}:** {country['office']} ({country['code']})",
+        f"**Core v{diff['from_version']} → v{diff['to_version']}**",
+        f"**{labels['date_label']}:** {today.isoformat()}",
+        "",
+        _format_notice_change_summary(diff),
+        "",
+        labels["what_changed"],
+        "",
+        _SUMMARY_PLACEHOLDER.get(language, _SUMMARY_PLACEHOLDER["en"]),
+        "",
+        labels["action_required"],
+        "",
+        labels["action_body"],
+        labels["return_by"].format(date=return_date),
+        "",
+    ]
+    return "\n".join(lines)
