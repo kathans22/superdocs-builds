@@ -10,12 +10,22 @@ from pathlib import Path
 import httpx2
 
 from . import config as config_module
+from . import corelock
+from . import sections as sections_module
 from .ledger import Ledger, ops_from_response
 from .mcp_client import SuperDocsClient, SuperDocsClientError, parse_proposed_changes
 
 ROOT = Path(__file__).resolve().parents[2]
 POLICY_MASTER_PATH = config_module.CONFIG_DIR / "policy-master.md"
 OUT_DIR = ROOT / "out"
+
+
+class PackIntegrityError(RuntimeError):
+    """Raised when an exported pack fails core or annex verification.
+
+    A pack that raises this is quarantined per CLAUDE.md rule 3: it is never
+    written to disk as a finished pack, and the run does not report success.
+    """
 
 _LANGUAGE_NAMES = {"en": "English", "fr": "French", "pt": "Portuguese"}
 
@@ -84,6 +94,65 @@ def build_instruction(manifest: dict, country: dict) -> str:
 
 
 _SECTION_MENTION_RE = re.compile(r"\bsection\s+(\d+)\b", re.IGNORECASE)
+_PARTIAL_APPLY_RE = re.compile(r"updated\s+(\d+)\s+of\s+(\d+)\s+sections?", re.IGNORECASE)
+
+
+def _master_annex_placeholders(manifest: dict) -> dict[int, str]:
+    """The unedited annex body text in policy-master.md, per annex section number.
+
+    Used as the corruption signal in verify_pack: if an exported pack's
+    annex section still contains this placeholder text, that section was
+    never cleanly localised — whether because the edit never landed, or
+    because a concurrent-merge response spliced the old body back in
+    alongside the new content. Observed live: a single-section retry after
+    a partial batch apply collided with the settling batched edit and the
+    merged, exported result kept both the placeholder sentence and the new
+    content in Section 8.
+    """
+    master_sections = sections_module.parse_sections(POLICY_MASTER_PATH.read_text(encoding="utf-8"))
+    annex_numbers = {s["number"] for s in manifest["sections"] if s["role"] == "annex"}
+    return {
+        s["number"]: corelock.normalise(s["body"])
+        for s in master_sections
+        if s["number"] in annex_numbers
+    }
+
+
+def verify_pack(markdown_text: str, manifest: dict, language: str) -> dict:
+    """Verify an exported pack: the core is untouched and every annex section landed.
+
+    Two independent checks, both must pass:
+    - core: recompute the core hash from the export and compare it to the
+      locked hash for this core_version/language (corelock.verify) — the
+      enforcement half of CLAUDE.md rule 3.
+    - annex: no annex section may still contain the master's unedited
+      placeholder text. This is the annex-side counterpart of the core hash
+      check: it catches an edit that silently didn't land, and it catches a
+      corrupted merge that spliced the old body back in next to the new one
+      (a hash comparison alone would not have caught the latter, since the
+      corrupted section is neither core nor byte-identical to anything
+      previously locked).
+    """
+    all_sections = sections_module.parse_sections(markdown_text)
+    core_numbers = {s["number"] for s in manifest["sections"] if s["role"] == "core"}
+    core_sections = [s for s in all_sections if s["number"] in core_numbers]
+
+    lock_data = corelock.load_lock(manifest["core_version"], language)
+    core_result = corelock.verify(core_sections, lock_data)
+
+    placeholders = _master_annex_placeholders(manifest)
+    section_by_number = {s["number"]: s for s in all_sections}
+    unlocalised = []
+    for number, placeholder in placeholders.items():
+        section = section_by_number.get(number)
+        if section is None or placeholder in corelock.normalise(section["body"]):
+            unlocalised.append(number)
+
+    return {
+        "passed": core_result["passed"] and not unlocalised,
+        "core": core_result,
+        "unlocalised_annex_sections": unlocalised,
+    }
 
 
 def assert_no_core_sections_named(instruction: str, manifest: dict) -> None:
@@ -250,8 +319,42 @@ async def generate_pack(
                 chat_calls=ops_from_response(apply_response), wall_time=time.monotonic() - started,
             )
 
-        exports = {}
+            match = _PARTIAL_APPLY_RE.search(apply_response.get("response") or "")
+            if match and match.group(1) != match.group(2):
+                # A partial batch apply is resolved by resending the identical
+                # batched instruction, not by targeting only the missed
+                # section: a single-section retry was observed live to
+                # collide with the still-settling batched edit and produce a
+                # merged section containing both the old and new text. One
+                # bounded retry; whatever lands is caught by verify_pack below.
+                started = time.monotonic()
+                retry_response = await client.chat(
+                    message=instruction, session_id=session_id, response_mode="compact"
+                )
+                ledger.record(
+                    "chat", f"{country_code} annex edit (retry incomplete batch)",
+                    chat_calls=ops_from_response(retry_response), wall_time=time.monotonic() - started,
+                )
+
+        started = time.monotonic()
+        markdown_export = await client.export(session_id=session_id, format="markdown")
+        ledger.record("export-markdown", country_code, chat_calls=0, wall_time=time.monotonic() - started)
+        markdown_text = markdown_export.get("text") or markdown_export.get("markdown") or markdown_export.get("content")
+
+        verification = verify_pack(markdown_text, manifest, country["language"])
+        if not verification["passed"]:
+            raise PackIntegrityError(
+                f"{country_code} pack failed verification and was quarantined — "
+                f"core: {verification['core']}, "
+                f"unlocalised annex sections: {verification['unlocalised_annex_sections']}. "
+                "Not exported; the run does not report success for this country."
+            )
+
+        markdown_filename = next(filename for fmt, filename in _EXPORT_FILES if fmt == "markdown")
+        exports = {"markdown": await _write_export(markdown_export, pack_dir / markdown_filename, "markdown")}
         for fmt, filename in _EXPORT_FILES:
+            if fmt == "markdown":
+                continue
             started = time.monotonic()
             export_response = await client.export(session_id=session_id, format=fmt)
             dest = await _write_export(export_response, pack_dir / filename, fmt, downloader=downloader)
