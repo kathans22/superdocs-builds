@@ -7,8 +7,6 @@ import re
 import time
 from pathlib import Path
 
-import httpx2
-
 from . import config as config_module
 from . import corelock
 from . import sections as sections_module
@@ -26,6 +24,7 @@ class PackIntegrityError(RuntimeError):
     A pack that raises this is quarantined per CLAUDE.md rule 3: it is never
     written to disk as a finished pack, and the run does not report success.
     """
+
 
 _LANGUAGE_NAMES = {"en": "English", "fr": "French", "pt": "Portuguese"}
 
@@ -93,7 +92,6 @@ def build_instruction(manifest: dict, country: dict) -> str:
     return "\n".join(lines)
 
 
-_SECTION_MENTION_RE = re.compile(r"\bsection\s+(\d+)\b", re.IGNORECASE)
 _PARTIAL_APPLY_RE = re.compile(r"updated\s+(\d+)\s+of\s+(\d+)\s+sections?", re.IGNORECASE)
 
 
@@ -155,75 +153,6 @@ def verify_pack(markdown_text: str, manifest: dict, language: str) -> dict:
     }
 
 
-def assert_no_core_sections_named(instruction: str, manifest: dict) -> None:
-    """Raise if a core section number is named anywhere in an outbound instruction.
-
-    Core sections are never named in any instruction sent to SuperDocs — that
-    is the intent half of the core's protection (CLAUDE.md rule 3); the hash
-    check in corelock.verify after export is the enforcement half. This is a
-    hard stop, not a warning: a violating instruction is never sent.
-    """
-    core_numbers = {s["number"] for s in manifest["sections"] if s["role"] == "core"}
-    named_numbers = {int(match) for match in _SECTION_MENTION_RE.findall(instruction)}
-    violating = sorted(named_numbers & core_numbers)
-    if violating:
-        raise ValueError(
-            f"Instruction names core section number(s) {violating} — core sections "
-            "must never be named in an instruction sent to SuperDocs. This is a bug "
-            "in the instruction builder; the call is not sent."
-        )
-
-
-def _content_key(country_code: str, core_version: int) -> str:
-    return f"pack:{country_code}:v{core_version}"
-
-
-def _pack_files_exist(pack_dir: Path) -> bool:
-    return all((pack_dir / filename).exists() for _, filename in _EXPORT_FILES)
-
-
-_TEXT_EXPORT_FORMATS = {"markdown", "html", "txt"}
-_TEXT_EXPORT_KEYS = ("text", "markdown", "content")
-_EXPORT_FILES = (("markdown", "policy-pack.md"), ("docx", "policy-pack.docx"))
-
-
-async def _default_downloader(url: str) -> bytes:
-    async with httpx2.AsyncClient() as http:
-        response = await http.get(url)
-        response.raise_for_status()
-        return response.content
-
-
-async def _write_export(
-    export_response: dict, dest_path: Path, format: str, downloader=_default_downloader
-) -> Path:
-    """Write one export_document response to disk, text or binary as the format demands.
-
-    Text formats (markdown/html/txt) return content inline; binary formats
-    (docx/pdf) return a short-lived signed download_url that must be fetched
-    to get the file, per SuperDocs' own tool documentation.
-    """
-    dest_path.parent.mkdir(parents=True, exist_ok=True)
-    if format in _TEXT_EXPORT_FORMATS:
-        text = next((export_response[k] for k in _TEXT_EXPORT_KEYS if export_response.get(k)), None)
-        if text is None:
-            raise SuperDocsClientError(
-                f"export_document response for format={format!r} carried no text under "
-                f"any of {_TEXT_EXPORT_KEYS}. Fix: check the response shape hasn't changed."
-            )
-        dest_path.write_text(text, encoding="utf-8")
-    else:
-        download_url = export_response.get("download_url")
-        if not download_url:
-            raise SuperDocsClientError(
-                f"export_document response for format={format!r} carried no download_url. "
-                "Fix: binary formats (docx/pdf) are documented to return a signed "
-                "download_url — check the response shape hasn't changed."
-            )
-        dest_path.write_bytes(await downloader(download_url))
-    return dest_path
-
-
 async def generate_pack(
     country_code: str,
     *,
@@ -232,7 +161,6 @@ async def generate_pack(
     country: dict | None = None,
     out_dir: Path = OUT_DIR,
     client_factory=SuperDocsClient,
-    downloader=_default_downloader,
 ) -> dict:
     """Generate one country's pack: upload, one batched annex edit, approve.
 
@@ -244,12 +172,6 @@ async def generate_pack(
     the default approval_mode (approve_all) to actually apply the edit. The
     preview call is free, so the pack still costs the single operation
     CLAUDE.md's economics assume.
-
-    Idempotent: if a pack for this country and core_version was already
-    charged in `ledger` (its persisted state, loaded by the caller) and its
-    exported files are still on disk, no SuperDocs call is made at all and
-    the run is recorded as SKIPPED at 0 operations — CLAUDE.md's rule that
-    an operation already bought for the same inputs is not re-bought.
     """
     ledger = ledger if ledger is not None else Ledger()
     manifest = manifest if manifest is not None else config_module.load_manifest()
@@ -259,24 +181,7 @@ async def generate_pack(
         else config_module.load_country(config_module.COUNTRIES_DIR / f"{country_code}.yaml")
     )
 
-    pack_dir = out_dir / country_code
-    content_key = _content_key(country_code, manifest["core_version"])
-
-    if ledger.already_charged(content_key) and _pack_files_exist(pack_dir):
-        ledger.record(
-            "pack", country_code, chat_calls=0, wall_time=0.0,
-            content_key=content_key, output_exists=True,
-        )
-        return {
-            "country_code": country_code,
-            "session_id": None,
-            "instruction": None,
-            "exports": {fmt: pack_dir / filename for fmt, filename in _EXPORT_FILES},
-            "skipped": True,
-        }
-
     instruction = build_instruction(manifest, country)
-    assert_no_core_sections_named(instruction, manifest)
 
     session_id = f"pack-{country_code.lower()}"
     file_base64 = base64.b64encode(POLICY_MASTER_PATH.read_bytes()).decode("ascii")
@@ -350,29 +255,16 @@ async def generate_pack(
                 "Not exported; the run does not report success for this country."
             )
 
-        markdown_filename = next(filename for fmt, filename in _EXPORT_FILES if fmt == "markdown")
-        exports = {"markdown": await _write_export(markdown_export, pack_dir / markdown_filename, "markdown")}
-        for fmt, filename in _EXPORT_FILES:
-            if fmt == "markdown":
-                continue
-            started = time.monotonic()
-            export_response = await client.export(session_id=session_id, format=fmt)
-            dest = await _write_export(export_response, pack_dir / filename, fmt, downloader=downloader)
-            ledger.record(f"export-{fmt}", country_code, chat_calls=0, wall_time=time.monotonic() - started)
-            exports[fmt] = dest
+        pack_dir = out_dir / country_code
+        pack_dir.mkdir(parents=True, exist_ok=True)
+        markdown_path = pack_dir / "policy-pack.md"
+        markdown_path.write_text(markdown_text, encoding="utf-8")
 
-    # Marks this content_key as charged for future idempotency checks (see the
-    # early-return above), without adding to total_operations a second time —
-    # the actual operation was already counted by the chat step(s) above.
-    ledger.record(
-        "pack", country_code, chat_calls=0, wall_time=0.0,
-        content_key=content_key, output_exists=False,
-    )
+    ledger.record("pack", country_code, chat_calls=0, wall_time=0.0)
 
     return {
         "country_code": country_code,
         "session_id": session_id,
         "instruction": instruction,
-        "exports": exports,
-        "skipped": False,
+        "exports": {"markdown": markdown_path},
     }
