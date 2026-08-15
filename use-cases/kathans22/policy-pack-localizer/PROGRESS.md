@@ -154,4 +154,82 @@ Not yet done, flagged for whichever prompt next builds the pack-generation path
 ledger.ops_from_response(chat_response))` rather than a hardcoded `chat_calls=1`, even
 though CLAUDE.md's stated economics ("1 op per pack") will still hold in practice — a
 real pack-generation call always applies a change, so it will always be billed — the
-point is not to bake the *assumption* back in a second time.
+point is not to bake the *assumption* back in a second time. (Done: `packs.py` does exactly
+this now — see Phase 3 below.)
+
+## Phase 3 — One country, end to end (Session 4, Prompts 11–12)
+
+**Prompt 11** implemented `packs.py`: `generate_pack(country_code)` — upload, batched annex
+edit, export to markdown and docx, idempotent per-`(country_code, core_version)` charging via
+`ledger`. The instruction builder (`build_instruction`) names annex sections only;
+`assert_no_core_sections_named` is a hard stop enforced before any call is sent, and
+`corelock.verify` after export is the enforcement half of the same guarantee.
+
+**Prompt 12** asked for the India round trip end to end, core hash verified against the lock.
+Live testing surfaced a real, blocking bug in SuperDocs itself before verification was even
+reached — the edit wasn't landing. Full detail, repro, and billing findings:
+`evidence/superdocs-batch-limit-report.md`. Summary:
+
+- A batched `chat` call replacing all 4 annex sections in one request **reports success and
+  changes nothing**, reproduced with two structurally different instruction phrasings.
+- Pinned precisely, live: 1, 2, and 3 sections in one call can all succeed; 4 fails
+  consistently. But 2-section batches were *also* observed to silently drop one of the two
+  targeted sections on other trials — so no batch size above 1 is safe to assume reliable,
+  including sizes proven to work in an earlier trial.
+- A session that has just experienced a partial/failed batch can misattribute a later,
+  differently-scoped single-section retry to the wrong section entirely.
+- Billing: a **novel** failing batch is billed once (`ops_charged: 1` for zero changes); an
+  **identical retry** of that same failing instruction is not billed; a bare transient error
+  (`"I encountered an issue. Please try again."`) is billed.
+
+**The fix** (per-user direction — do not hardcode the boundary; add real detection and
+recovery instead of a threshold):
+
+- `config/manifest.yaml` gained a required `annex_batch_size` field (currently `2`) — a live,
+  undocumented API characteristic belongs in config, adjustable as it's re-verified, never a
+  Python constant.
+- `packs.py`'s `generate_pack` now sends the annex edit in `annex_batch_size` batches via
+  `_localise_annex` → `_apply_annex_batch`. After every batch, it re-exports and checks each
+  targeted section's actual body against the master's original text (`_sections_landed`) —
+  never trusting the response text. Any section that didn't land has its batch split
+  (bisected) and retried, bounded by `_MAX_RETRY_DEPTH`. A section still unlanded after
+  isolation to a batch of one falls through to `verify_pack`'s existing placeholder check,
+  which quarantines the pack rather than shipping it silently incomplete.
+- Removed the now-obsolete `ask_every_time` preview + `approve_change` fallback path and its
+  regex-based partial-apply detection (`_PARTIAL_APPLY_RE`) — `approve_change` never worked
+  against a synchronous `chat()` call regardless (Prompt 10 finding), and the regex matched a
+  response shape ("Updated X of Y sections") different from every failure shape actually
+  observed live.
+- `tests/test_packs.py` rewritten around a fake client that tracks real document mutation
+  (`_MutatingFakeClient`), including a test that reproduces the exact live bug (a batch that
+  reports success and changes nothing) and proves detection + split-retry recovers from it.
+- `CLAUDE.md`'s economics corrected: a pack costs **2 ops**, not 1. Full rollout **12** (2
+  translations + 5 packs × 2); core amendment reaching all 5 stays **7** (2 re-translations +
+  5 single-document notices — a notice isn't a batched multi-section call, so its cost is
+  unaffected).
+
+**The real India round trip, live** (session `pack-in-real`, after the fix): uploaded the real
+`config/policy-master.md`, sent the batched annex edit as `annex_batch_size=2` batches (with
+several of the partial-failure symptoms above occurring and being manually worked through
+live, exactly as the automated retry path is designed to handle), exported markdown, ran the
+real `corelock.lock()`/`packs.verify_pack()`:
+
+```
+locked core_hash: aa3a7460e6602b04e59acbe8ef73be464c3951624b50903a61b548ce64e186e8
+passed: True
+core passed: True
+core_hash_matches: True
+diverged_sections: []
+unlocalised_annex_sections: []
+```
+
+India's pack — core sections 1–5 byte-identical to the lock, all four annex sections
+genuinely localised (India-specific email/phone/helplines, POCSO/POSH/JJ Act citations,
+Mumbai escalation tiers, NCPCR) — is saved at `out/IN/policy-pack.md` and `out/IN/policy-pack.docx`
+(gitignored; not committed, per CLAUDE.md).
+
+**Deviation from plan:** Prompt 12's checkpoint description assumed a single batched call
+would work and only verification remained to prove. It didn't — the batching assumption
+itself was wrong, discovered only by running it live rather than trusting the design. Fixed
+forward per CLAUDE.md's own commit protocol, with a full bug report filed
+(`evidence/superdocs-batch-limit-report.md`) rather than silently working around it.
