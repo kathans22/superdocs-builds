@@ -32,6 +32,8 @@ _NOTICE_LABELS = {
         "title": "Change Notice",
         "office_label": "Office",
         "date_label": "Date",
+        "previously": "Previously:",
+        "now": "Now:",
         "what_changed": "What changed:",
         "action_required": "Action required:",
         "action_body": (
@@ -44,6 +46,8 @@ _NOTICE_LABELS = {
         "title": "Avis de modification",
         "office_label": "Bureau",
         "date_label": "Date",
+        "previously": "Auparavant :",
+        "now": "Désormais :",
         "what_changed": "Ce qui a changé :",
         "action_required": "Action requise :",
         "action_body": (
@@ -56,6 +60,8 @@ _NOTICE_LABELS = {
         "title": "Aviso de Alteração",
         "office_label": "Escritório",
         "date_label": "Data",
+        "previously": "Anteriormente:",
+        "now": "Agora:",
         "what_changed": "O que mudou:",
         "action_required": "Ação necessária:",
         "action_body": (
@@ -374,6 +380,64 @@ def _format_notice_change_summary(diff: dict) -> str:
     return f"{header} Section{'s' if len(unchanged) != 1 else ''} {_join_numbers(unchanged)} unchanged."
 
 
+def _archived_master_path(version: int, manifest: dict) -> Path:
+    """Path to the exact English master text for one core_version.
+
+    config/policy-master.md always holds the CURRENT core_version — whatever
+    manifest['core_version'] is right now. Every prior version is archived at
+    config/policy-master-v{version}.md by the amendment that superseded it
+    (Prompt 18 archived v1 before amending section 4 to v2), so both the
+    "before" and "after" text of any past amendment stay quotable verbatim,
+    not just hash-locked.
+    """
+    if version == manifest["core_version"]:
+        return POLICY_MASTER_PATH
+    archived = config_module.CONFIG_DIR / f"policy-master-v{version}.md"
+    if not archived.exists():
+        raise ValueError(
+            f"No archived master text for core_version {version} at {archived}. Fix: "
+            "an amendment must archive the master text it is about to overwrite, the "
+            "way policy-master-v1.md was archived before section 4 changed to v2."
+        )
+    return archived
+
+
+def _core_sections_at(version: int, language: str, manifest: dict) -> dict[int, dict]:
+    """Verbatim core section text (number/heading/body) at one core_version,
+    in one language — the source for a change notice's quoted before/after.
+
+    Source language reads straight from the archived/current master text
+    (_archived_master_path); every other language reads the verbatim
+    'sections' its lock already carries (translate.derive_core and
+    retranslate_changed_sections persist this, never just hashes) — the
+    same two-path split packs._assemble_upload_document already uses for
+    assembling a pack's core.
+    """
+    if language == manifest["source_language"]:
+        text = _archived_master_path(version, manifest).read_text(encoding="utf-8")
+        parsed = sections_module.parse_sections(text)
+        core_numbers = {s["number"] for s in manifest["sections"] if s["role"] == "core"}
+        return {s["number"]: s for s in parsed if s["number"] in core_numbers}
+
+    lock_data = corelock.load_lock(version, language)
+    sections = lock_data.get("sections")
+    if not sections:
+        raise ValueError(
+            f"The v{version} lock for language {language!r} has no verbatim section "
+            "text saved, only hashes. Fix: this lock predates translate.derive_core "
+            "or retranslate_changed_sections persisting 'sections' — re-derive it."
+        )
+    return {s["number"]: s for s in sections}
+
+
+def _quote_block(text: str) -> str:
+    """A markdown blockquote of `text`, verbatim — never paraphrased,
+    never re-typed by a model. Every changed section's previous and new
+    text in a notice comes from here, straight from locked/archived text.
+    """
+    return "\n".join(f"> {line}" if line else ">" for line in text.splitlines())
+
+
 def generate_change_notice(
     country_code: str,
     manifest: dict,
@@ -385,15 +449,17 @@ def generate_change_notice(
     """Build one country's change notice as markdown: a short document, not
     a pack — the office reads what moved, not a 40-page reissue.
 
-    This is the deterministic skeleton: office name and code, "core v1 →
-    v2", the date, and the notice's summary line
-    (_format_notice_change_summary). Known fields into a known structure,
-    no ambiguity for a model to resolve — the same reasoning ack.py already
-    applies to the acknowledgement form. Quoting the changed section's
-    previous/new text and the explicit unchanged-annexes line are added on
-    top of this skeleton in later steps; the one genuinely interpretive
-    piece (a plain-language "what changed" summary) is filled in by the
-    single billed SuperDocs call.
+    Deterministic except one line: office name and code, "core v1 → v2",
+    the date, the notice's summary line (_format_notice_change_summary),
+    every changed section's heading with its previous and new text quoted
+    VERBATIM (never model-generated — pulled from locked/archived text via
+    _core_sections_at, the same text corelock already hash-verified), and
+    the action required with a return date. Known fields and known text
+    into a known structure, no ambiguity for a model to resolve — the same
+    reasoning ack.py already applies to the acknowledgement form. The one
+    genuinely interpretive piece (a plain-language "what changed" summary)
+    is left as a placeholder here, filled in by the single billed
+    SuperDocs call layered on top of this function.
     """
     country = (
         country if country is not None
@@ -403,6 +469,10 @@ def generate_change_notice(
     language = country["language"]
     labels = _NOTICE_LABELS.get(language, _NOTICE_LABELS["en"])
     return_date = (today + datetime.timedelta(days=_NOTICE_RETURN_WINDOW_DAYS)).isoformat()
+    summary_placeholder = _SUMMARY_PLACEHOLDER.get(language, _SUMMARY_PLACEHOLDER["en"])
+
+    before_sections = _core_sections_at(diff["from_version"], language, manifest)
+    after_sections = _core_sections_at(diff["to_version"], language, manifest)
 
     lines = [
         f"## {labels['title']}",
@@ -413,10 +483,26 @@ def generate_change_notice(
         "",
         _format_notice_change_summary(diff),
         "",
-        labels["what_changed"],
-        "",
-        _SUMMARY_PLACEHOLDER.get(language, _SUMMARY_PLACEHOLDER["en"]),
-        "",
+    ]
+
+    for number in diff["changed_sections"]:
+        after_section = after_sections[number]
+        lines += [
+            f"### Section {number} — {after_section['heading']}",
+            "",
+            labels["previously"],
+            _quote_block(before_sections[number]["body"]),
+            "",
+            labels["now"],
+            _quote_block(after_section["body"]),
+            "",
+            labels["what_changed"],
+            "",
+            summary_placeholder,
+            "",
+        ]
+
+    lines += [
         labels["action_required"],
         "",
         labels["action_body"],
