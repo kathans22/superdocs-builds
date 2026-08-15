@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from contextlib import AsyncExitStack
 
@@ -74,3 +75,65 @@ class SuperDocsClient:
             await self._exit_stack.aclose()
         self._exit_stack = None
         self._session = None
+
+    async def _call_tool(self, name: str, arguments: dict) -> dict:
+        if self._session is None:
+            raise SuperDocsClientError(
+                f"Cannot call '{name}': not connected. Fix: use "
+                "'async with SuperDocsClient() as client:' or call connect() first."
+            )
+        result = await self._session.call_tool(name, arguments)
+        if result.isError:
+            detail = _first_text(result.content) or "no error detail returned"
+            raise SuperDocsClientError(f"SuperDocs tool '{name}' returned an error: {detail}")
+        if result.structuredContent is not None:
+            return result.structuredContent
+        text = _first_text(result.content)
+        if text is None:
+            return {}
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return {"text": text}
+
+    async def upload(
+        self, filename: str, file_base64: str, session_id: str | None = None, return_html: bool = False
+    ) -> dict:
+        """Upload a document as the active editable document for a session."""
+        arguments = {"filename": filename, "file_base64": file_base64, "return_html": return_html}
+        if session_id is not None:
+            arguments["session_id"] = session_id
+        return await self._call_tool("upload_document_base64", arguments)
+
+    async def export(
+        self,
+        session_id: str | None = None,
+        html: str | None = None,
+        format: str = "docx",
+        options: dict | None = None,
+        filename: str | None = None,
+    ) -> dict:
+        """Export the current document as docx, pdf, html, markdown, or txt."""
+        if session_id is None and html is None:
+            raise SuperDocsClientError(
+                "export requires either session_id or html. Fix: pass the session_id "
+                "whose document you want exported, or pass html directly."
+            )
+        arguments: dict = {"format": format}
+        if session_id is not None:
+            arguments["session_id"] = session_id
+        if html is not None:
+            arguments["html"] = html
+        if options is not None:
+            arguments["options"] = options
+        if filename is not None:
+            arguments["filename"] = filename
+        return await self._call_tool("export_document", arguments)
+
+
+def _first_text(content) -> str | None:
+    for block in content or []:
+        text = getattr(block, "text", None)
+        if text is not None:
+            return text
+    return None
