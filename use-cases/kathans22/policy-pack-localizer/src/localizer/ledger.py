@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+STATE_DIR = Path(__file__).resolve().parents[2] / "state"
+LEDGER_PATH = STATE_DIR / "ledger.json"
 
 
 @dataclass
@@ -41,3 +46,47 @@ class Ledger:
     @property
     def total_operations(self) -> int:
         return sum(e.operations for e in self.entries)
+
+    def save(self, path: Path = LEDGER_PATH) -> Path:
+        """Persist entries to state/ so a resumed run does not double-count."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps([asdict(e) for e in self.entries], indent=2), encoding="utf-8"
+        )
+        return path
+
+    @classmethod
+    def load(cls, path: Path = LEDGER_PATH) -> "Ledger":
+        """Load a previously saved ledger, or start empty if none exists yet."""
+        ledger = cls()
+        if path.exists():
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            ledger.entries = [LedgerEntry(**entry) for entry in raw]
+        return ledger
+
+    def report(self) -> str:
+        """Print and return the aligned run-cost table: one line per step, a total."""
+        lines = [_format_line(f"[{e.step}]", e.subject, e.operations, e.status) for e in self.entries]
+        lines.append(" " * (_LINE_WIDTH - len(_RULE)) + _RULE)
+        lines.append(_format_line("", "total", self.total_operations, "CHARGED", label_is_total=True))
+        text = "\n".join(lines)
+        print(text)
+        return text
+
+
+_LINE_WIDTH = 62
+_RULE = "-" * 7
+_TAG_WIDTH = 12
+
+
+def _format_ops(n: int) -> str:
+    return f"{n} op" if n == 1 else f"{n} ops"
+
+
+def _format_line(tag: str, subject: str, operations: int, status: str, label_is_total: bool = False) -> str:
+    label = subject if label_is_total else f"{tag:<{_TAG_WIDTH}}{subject}"
+    ops_text = _format_ops(operations)
+    if status == "SKIPPED":
+        ops_text = f"SKIPPED ({ops_text})"
+    pad = max(1, _LINE_WIDTH - len(label) - len(ops_text))
+    return f"{label}{' ' * pad}{ops_text}"
