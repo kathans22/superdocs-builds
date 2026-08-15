@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 
 from localizer import config as config_module
+from localizer import corelock
 from localizer import sections as sections_module
 from localizer import translate
 from localizer.ledger import Ledger
@@ -98,21 +99,40 @@ def test_derive_core_rejects_the_source_language():
     assert raised
 
 
-def test_derive_core_returns_only_the_translated_core_sections():
+def test_derive_core_returns_a_lock_covering_only_the_core_sections(tmp_path, monkeypatch):
     manifest = _manifest()
+    monkeypatch.setattr(corelock, "STATE_DIR", tmp_path)
     fake_client = _TranslatingFakeClient(manifest)
 
-    core_sections = asyncio.run(
+    lock_data = asyncio.run(
         translate.derive_core("fr", manifest=manifest, client_factory=lambda: fake_client)
     )
 
-    assert sorted(s["number"] for s in core_sections) == [1, 2, 3, 4, 5]
-    for section in core_sections:
-        assert section["body"].startswith(_TRANSLATED_PREFIX)
+    assert lock_data["language"] == "fr"
+    assert lock_data["core_version"] == manifest["core_version"]
+    assert sorted(lock_data["section_numbers"]) == [1, 2, 3, 4, 5]
+    assert sorted(lock_data["section_hashes"]) == ["1", "2", "3", "4", "5"]
+    assert "core_hash" in lock_data
 
 
-def test_derive_core_never_translates_annex_sections():
+def test_derive_core_writes_the_lock_to_state_and_it_reloads_identically(tmp_path, monkeypatch):
     manifest = _manifest()
+    monkeypatch.setattr(corelock, "STATE_DIR", tmp_path)
+    fake_client = _TranslatingFakeClient(manifest)
+
+    lock_data = asyncio.run(
+        translate.derive_core("fr", manifest=manifest, client_factory=lambda: fake_client)
+    )
+
+    lock_path = tmp_path / f"core-lock-v{manifest['core_version']}-fr.json"
+    assert lock_path.exists()
+    reloaded = corelock.load_lock(manifest["core_version"], "fr")
+    assert reloaded == lock_data
+
+
+def test_derive_core_never_translates_annex_sections(tmp_path, monkeypatch):
+    manifest = _manifest()
+    monkeypatch.setattr(corelock, "STATE_DIR", tmp_path)
     fake_client = _TranslatingFakeClient(manifest)
 
     asyncio.run(translate.derive_core("fr", manifest=manifest, client_factory=lambda: fake_client))
@@ -121,8 +141,9 @@ def test_derive_core_never_translates_annex_sections():
         assert not fake_client.body_by_number[number].startswith(_TRANSLATED_PREFIX)
 
 
-def test_derive_core_costs_exactly_one_operation():
+def test_derive_core_costs_exactly_one_operation(tmp_path, monkeypatch):
     manifest = _manifest()
+    monkeypatch.setattr(corelock, "STATE_DIR", tmp_path)
     ledger = Ledger()
     fake_client = _TranslatingFakeClient(manifest)
 

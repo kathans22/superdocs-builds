@@ -6,6 +6,7 @@ import base64
 import time
 
 from . import config as config_module
+from . import corelock
 from . import sections as sections_module
 from .ledger import Ledger, ops_from_response
 from .mcp_client import SuperDocsClient, SuperDocsClientError
@@ -53,13 +54,14 @@ async def derive_core(
     ledger: Ledger | None = None,
     manifest: dict | None = None,
     client_factory=SuperDocsClient,
-) -> list[dict]:
-    """Translate the core sections into `language` and return them, parsed.
+) -> dict:
+    """Translate the core sections into `language`, hash them, and lock them.
 
     Upload is free; the chat call that applies the translation is the one
-    billed step; export is free. Hashing and locking the result is added
-    next — this currently returns the raw parsed core sections, not yet a
-    lock.
+    billed step; export is free. The extracted core sections are hashed and
+    written to state/core-lock-v{version}-{lang}.json via the same
+    corelock.lock()/save_lock() lock-time path the source language uses
+    (service.lock_core) — one lock format, one place that produces it.
     """
     ledger = ledger if ledger is not None else Ledger()
     manifest = manifest if manifest is not None else config_module.load_manifest()
@@ -98,4 +100,7 @@ async def derive_core(
             "no text. Fix: check the response shape hasn't changed."
         )
 
-    return _extract_core_sections(markdown_text, manifest)
+    core_sections = _extract_core_sections(markdown_text, manifest)
+    lock_data = corelock.lock(core_sections, manifest["core_version"], language)
+    corelock.save_lock(lock_data)
+    return lock_data
