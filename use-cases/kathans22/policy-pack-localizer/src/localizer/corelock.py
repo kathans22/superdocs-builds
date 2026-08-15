@@ -125,3 +125,52 @@ def load_lock(core_version: int, language: str) -> dict:
     """Read back the lock file for a given core_version and language."""
     path = _lock_path(core_version, language)
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def verify(sections: list[dict], lock_data: dict) -> dict:
+    """Recompute core section hashes and compare against a lock.
+
+    Names exactly which section numbers diverged, are missing from
+    `sections` but present in the lock, or are present in `sections` but
+    not covered by the lock — not just a pass/fail boolean.
+    """
+    lock_numbers = lock_data["section_numbers"]
+    section_by_number = {s["number"]: s for s in sections}
+
+    missing_sections = [n for n in lock_numbers if n not in section_by_number]
+    unexpected_sections = [
+        s["number"] for s in sections if s["number"] not in lock_numbers
+    ]
+
+    diverged_sections = []
+    for number in lock_numbers:
+        section = section_by_number.get(number)
+        if section is None:
+            continue
+        actual_hash = hashlib.sha256(
+            normalise(section["body"]).encode("utf-8")
+        ).hexdigest()
+        expected_hash = lock_data["section_hashes"][str(number)]
+        if actual_hash != expected_hash:
+            diverged_sections.append(number)
+
+    core_hash_matches = False
+    if not missing_sections and not unexpected_sections:
+        ordered_present = [section_by_number[n] for n in lock_numbers]
+        recomputed = lock(ordered_present, lock_data["core_version"], lock_data["language"])
+        core_hash_matches = recomputed["core_hash"] == lock_data["core_hash"]
+
+    passed = (
+        not diverged_sections
+        and not missing_sections
+        and not unexpected_sections
+        and core_hash_matches
+    )
+
+    return {
+        "passed": passed,
+        "diverged_sections": diverged_sections,
+        "missing_sections": missing_sections,
+        "unexpected_sections": unexpected_sections,
+        "core_hash_matches": core_hash_matches,
+    }
