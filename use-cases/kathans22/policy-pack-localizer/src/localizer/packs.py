@@ -491,6 +491,32 @@ def _assemble_upload_document(manifest: dict, country: dict) -> str:
     return "\n".join(lines)
 
 
+def _assert_core_verbatim(document_text: str, manifest: dict, language: str) -> None:
+    """Prove, locally and with zero SuperDocs calls, that the document about
+    to be uploaded already carries the locked core exactly.
+
+    This is the "never regenerate it" guarantee made concrete before a
+    single network call is made, not just hoped for: the pack session's
+    chat calls only ever name annex sections (assert_no_core_sections_named
+    enforces that), so the core arriving at SuperDocs must already be
+    correct — there is no later step that could fix it. A failure here
+    means _assemble_upload_document or the persisted lock is wrong, never
+    that SuperDocs mishandled the core.
+    """
+    if language == manifest["source_language"]:
+        return  # unlocalised master core is verified via service.lock_core elsewhere
+    core_sections = extract_core_sections(document_text, manifest)
+    lock_data = corelock.load_lock(manifest["core_version"], language)
+    result = corelock.verify(core_sections, lock_data)
+    if not result["passed"]:
+        raise PackIntegrityError(
+            f"The document assembled for language {language!r} does not match its "
+            f"locked core before any SuperDocs call was made: {result}. This is a bug "
+            "in _assemble_upload_document or the persisted lock, not in SuperDocs — "
+            "no call was sent."
+        )
+
+
 async def generate_pack(
     country_code: str,
     *,
@@ -546,6 +572,7 @@ async def generate_pack(
 
     session_id = f"pack-{country_code.lower()}"
     document_text = _assemble_upload_document(manifest, country)
+    _assert_core_verbatim(document_text, manifest, country["language"])
     file_base64 = base64.b64encode(document_text.encode("utf-8")).decode("ascii")
     instruction = build_instruction(manifest, country)  # full instruction, kept for the return value
 

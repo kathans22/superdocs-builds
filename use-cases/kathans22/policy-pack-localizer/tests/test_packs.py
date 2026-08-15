@@ -12,6 +12,7 @@ from localizer import config as config_module
 from localizer import corelock
 from localizer import packs
 from localizer import sections as sections_module
+from localizer import translate
 from localizer.ledger import Ledger
 from localizer.mcp_client import SuperDocsClientError
 
@@ -475,6 +476,45 @@ def test_generate_pack_builds_a_non_english_country_from_the_locked_translated_c
         if name == "chat" and kwargs["session_id"] == "translate-fr"
     ]
     assert len(translate_chats) == 1
+
+
+def test_generate_pack_blocks_before_any_superdocs_call_on_a_corrupted_core_lock(tmp_path, monkeypatch):
+    """If the persisted translated-core lock's verbatim text ever disagreed
+    with its own hashes — a corrupted write, never expected in practice —
+    generate_pack must refuse to assemble a document from it, and must
+    never make a single SuperDocs call while doing so: the check runs
+    entirely locally, before upload."""
+    manifest = config_module.load_manifest()
+    fr = config_module.load_country(config_module.COUNTRIES_DIR / "FR.yaml")
+    monkeypatch.setattr(corelock, "STATE_DIR", tmp_path / "state")
+
+    core_numbers = {s["number"] for s in manifest["sections"] if s["role"] == "core"}
+    master_sections = sections_module.parse_sections(packs.POLICY_MASTER_PATH.read_text(encoding="utf-8"))
+    core_sections = [s for s in master_sections if s["number"] in core_numbers]
+    lock_data = corelock.lock(core_sections, manifest["core_version"], "fr")
+    # Corrupt: the hashes were computed from the real core text, but the
+    # verbatim text saved alongside them is something else entirely.
+    lock_data["sections"] = [dict(s, body="CORRUPTED TEXT") for s in core_sections]
+    corelock.save_lock(lock_data)
+
+    ledger = Ledger()
+    content_key = translate._content_key(manifest["core_version"], "fr")
+    ledger.record("translate", "fr", chat_calls=0, wall_time=0.0, content_key=content_key)
+    fake_client = _MultiSessionFakeClient(manifest, {"FR": fr})
+
+    raised = False
+    try:
+        asyncio.run(
+            packs.generate_pack(
+                "FR", ledger=ledger, manifest=manifest, country=fr, out_dir=tmp_path / "out",
+                client_factory=lambda: fake_client, downloader=_fake_downloader,
+            )
+        )
+    except packs.PackIntegrityError:
+        raised = True
+
+    assert raised
+    assert fake_client.calls == []  # blocked before any SuperDocs call at all
 
 
 def test_generate_pack_quarantines_a_pack_whose_annex_never_lands(tmp_path, monkeypatch):
