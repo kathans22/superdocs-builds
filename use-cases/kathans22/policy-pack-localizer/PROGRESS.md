@@ -133,3 +133,25 @@ confirmed sections 1–5 and 7–9 were untouched; only section 6 changed, to:
 > India Office: Internal contact is the Country Safeguarding Focal Point, Mumbai, reachable at
 > safeguarding.in@meridian-relief.example or +91 22 0000 0000. External channels: Childline
 > India (1098, toll-free 24-hour child helpline) and the Police Control Room (112).
+
+### fix(ledger): charge chat calls from real usage, not a flat 1 per call
+
+What was wrong: `ledger.py` (Prompt 9) charged every `chat` call 1 operation
+unconditionally. Finding 2 above proved that's incorrect — a preview-only call is free.
+Left as-is, `ledger.py` would overcount any future preview call, which breaks the ledger's
+entire purpose: it is supposed to answer "what did this actually cost," not "how many calls
+did we make." `smoke.py` already worked around this locally with its own `_ops_charged()`
+helper, but the fix belongs in `ledger.py` itself, where every other caller can use it.
+
+Fix: added `ops_from_response(response) -> int` to `ledger.py` — reads `usage.was_billable`
+and `usage.ops_charged` from a real SuperDocs response instead of assuming a constant.
+`smoke.py`'s local copy was removed in favour of importing this. Re-verified against the
+same real captured payloads from the Prompt 10 run: ledger total is still correctly 1 op
+(0 for the preview, 1 for the apply). Full test suite (10 tests) still passes.
+
+Not yet done, flagged for whichever prompt next builds the pack-generation path
+(`packs.py`, Phase 3+): that code should call `ledger.record(..., chat_calls=
+ledger.ops_from_response(chat_response))` rather than a hardcoded `chat_calls=1`, even
+though CLAUDE.md's stated economics ("1 op per pack") will still hold in practice — a
+real pack-generation call always applies a change, so it will always be billed — the
+point is not to bake the *assumption* back in a second time.
