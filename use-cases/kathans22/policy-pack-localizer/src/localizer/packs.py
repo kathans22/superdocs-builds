@@ -175,6 +175,14 @@ def verify_pack(markdown_text: str, manifest: dict, language: str) -> dict:
     }
 
 
+def _content_key(country_code: str, core_version: int) -> str:
+    return f"pack:{country_code}:v{core_version}"
+
+
+def _pack_files_exist(pack_dir: Path) -> bool:
+    return all((pack_dir / filename).exists() for _, filename in _EXPORT_FILES)
+
+
 _TEXT_EXPORT_FORMATS = {"markdown", "html", "txt"}
 _TEXT_EXPORT_KEYS = ("text", "markdown", "content")
 _EXPORT_FILES = (("markdown", "policy-pack.md"), ("docx", "policy-pack.docx"))
@@ -245,6 +253,22 @@ async def generate_pack(
         if country is not None
         else config_module.load_country(config_module.COUNTRIES_DIR / f"{country_code}.yaml")
     )
+
+    pack_dir = out_dir / country_code
+    content_key = _content_key(country_code, manifest["core_version"])
+
+    if ledger.already_charged(content_key) and _pack_files_exist(pack_dir):
+        ledger.record(
+            "pack", country_code, chat_calls=0, wall_time=0.0,
+            content_key=content_key, output_exists=True,
+        )
+        return {
+            "country_code": country_code,
+            "session_id": None,
+            "instruction": None,
+            "exports": {fmt: pack_dir / filename for fmt, filename in _EXPORT_FILES},
+            "skipped": True,
+        }
 
     instruction = build_instruction(manifest, country)
     assert_no_core_sections_named(instruction, manifest)
@@ -321,7 +345,6 @@ async def generate_pack(
                 "Not exported; the run does not report success for this country."
             )
 
-        pack_dir = out_dir / country_code
         markdown_filename = next(filename for fmt, filename in _EXPORT_FILES if fmt == "markdown")
         exports = {"markdown": await _write_export(markdown_export, pack_dir / markdown_filename, "markdown")}
         for fmt, filename in _EXPORT_FILES:
@@ -333,11 +356,18 @@ async def generate_pack(
             ledger.record(f"export-{fmt}", country_code, chat_calls=0, wall_time=time.monotonic() - started)
             exports[fmt] = dest
 
-    ledger.record("pack", country_code, chat_calls=0, wall_time=0.0)
+    # Marks this content_key as charged for future idempotency checks (see the
+    # early-return above), without adding to total_operations a second time —
+    # the actual operation was already counted by the chat step(s) above.
+    ledger.record(
+        "pack", country_code, chat_calls=0, wall_time=0.0,
+        content_key=content_key, output_exists=False,
+    )
 
     return {
         "country_code": country_code,
         "session_id": session_id,
         "instruction": instruction,
         "exports": exports,
+        "skipped": False,
     }
