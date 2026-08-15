@@ -55,3 +55,44 @@ def test_annex_edit_changes_neither_core_section_hash_nor_core_hash():
 
     assert after["core_hash"] == baseline["core_hash"]
     assert after["section_hashes"] == baseline["section_hashes"]
+
+
+# Round-trip resilience: each test isolates one cosmetic mutation the normaliser
+# claims to absorb (see corelock.normalise's numbered contract) and proves the
+# core_hash is unchanged between a clean and a noisy variant of the same text.
+# One test per mutation, so a failure names the specific rule that broke.
+
+
+def _lock_of(body: str) -> dict:
+    section = [{"number": 1, "heading": "Test", "body": body}]
+    return corelock.lock(section, core_version=1, language="en")
+
+
+def test_roundtrip_survives_quote_style_change():
+    straight = 'The term "Safeguarding Focal Point" reflects staff\'s duty to report.'
+    curly = "The term “Safeguarding Focal Point” reflects staff’s duty to report."
+    assert _lock_of(straight)["core_hash"] == _lock_of(curly)["core_hash"]
+
+
+def test_roundtrip_survives_trailing_whitespace():
+    clean = "First line of the clause.\nSecond line of the clause."
+    noisy = "First line of the clause.   \nSecond line of the clause.\t\t"
+    assert _lock_of(clean)["core_hash"] == _lock_of(noisy)["core_hash"]
+
+
+def test_roundtrip_survives_blank_line_runs():
+    clean = "First paragraph of core text.\n\nSecond paragraph of core text."
+    noisy = "First paragraph of core text.\n\n\n\n\n\nSecond paragraph of core text."
+    assert _lock_of(clean)["core_hash"] == _lock_of(noisy)["core_hash"]
+
+
+def test_roundtrip_survives_line_endings():
+    unix = "Line one of the clause.\nLine two continues the clause."
+    windows = "Line one of the clause.\r\nLine two continues the clause."
+    assert _lock_of(unix)["core_hash"] == _lock_of(windows)["core_hash"]
+
+
+def test_roundtrip_survives_list_marker_style():
+    clean = "Reports may include:\n- item one\n- item two"
+    noisy = "Reports may include:\n* item one\n• item two"
+    assert _lock_of(clean)["core_hash"] == _lock_of(noisy)["core_hash"]
