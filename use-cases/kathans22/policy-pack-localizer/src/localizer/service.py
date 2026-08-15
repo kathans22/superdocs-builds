@@ -73,6 +73,10 @@ def integrity_report(
     core_version = manifest["core_version"]
     markdown_filename = next(filename for fmt, filename in packs._EXPORT_FILES if fmt == "markdown")
 
+    annex_slots = [s["slot"] for s in manifest["sections"] if s["role"] == "annex" and s["slot"] != "acknowledgement"]
+    slot_by_number = {s["number"]: s["slot"] for s in manifest["sections"] if s["role"] == "annex"}
+    annex_bodies: dict[str, dict[str, str]] = {slot: {} for slot in annex_slots}
+
     languages: dict[str, int] = {}
     core_identity: dict[str, dict] = {}
     all_pass = True
@@ -97,8 +101,23 @@ def integrity_report(
         if actual_hash != entry["expected"]:
             entry["identical"] = False
 
+        for section in sections_module.parse_sections(markdown_text):
+            slot = slot_by_number.get(section["number"])
+            if slot in annex_bodies:
+                annex_bodies[slot][code] = corelock.normalise(section["body"])
+
     for entry in core_identity.values():
         entry["packs"].sort()
+
+    # Counted, not claimed: the same normalise() lock/verify use, so a
+    # cosmetic export difference never inflates the distinct count — only a
+    # genuine content difference does. acknowledgement is excluded: it is
+    # deterministic office/date/name fields, not a claim about country
+    # specificity, and would trivially read as "N distinct" for the wrong
+    # reason (every office name differs).
+    annex_divergence = {
+        slot: f"{len(set(bodies.values()))} distinct" for slot, bodies in annex_bodies.items()
+    }
 
     return {
         "core_version": core_version,
@@ -106,6 +125,7 @@ def integrity_report(
         "languages": languages,
         "core_identity": core_identity,
         "all_packs_pass": all_pass,
+        "annex_divergence": annex_divergence,
     }
 
 

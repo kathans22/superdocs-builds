@@ -77,3 +77,47 @@ def test_integrity_report_flags_a_diverged_core_as_not_identical(tmp_path, monke
 
     assert report["core_identity"]["en"]["identical"] is False
     assert report["all_packs_pass"] is False
+
+
+def test_integrity_report_counts_distinct_annex_content_per_slot(tmp_path, monkeypatch):
+    manifest = config_module.load_manifest()
+    monkeypatch.setattr(corelock, "STATE_DIR", tmp_path / "state")
+    _lock_english_core(manifest)
+
+    in_country = config_module.load_country(config_module.COUNTRIES_DIR / "IN.yaml")
+    ke_country = config_module.load_country(config_module.COUNTRIES_DIR / "KE.yaml")
+    out_dir = tmp_path / "out"
+    _write_pack(out_dir, "IN", _valid_pack_markdown(manifest, in_country))
+    _write_pack(out_dir, "KE", _valid_pack_markdown(manifest, ke_country))
+
+    report = service.integrity_report(["IN", "KE"], manifest=manifest, out_dir=out_dir)
+
+    assert report["annex_divergence"] == {
+        "reporting": "2 distinct",
+        "legal": "2 distinct",
+        "escalation": "2 distinct",
+    }
+    assert "acknowledgement" not in report["annex_divergence"]
+
+
+def test_integrity_report_counts_one_distinct_when_annex_content_matches(tmp_path, monkeypatch):
+    # Two packs given the SAME country's annex content must count as one
+    # distinct value per slot — proving the count reacts to real content,
+    # not just to how many packs there are.
+    manifest = config_module.load_manifest()
+    monkeypatch.setattr(corelock, "STATE_DIR", tmp_path / "state")
+    _lock_english_core(manifest)
+
+    in_country = config_module.load_country(config_module.COUNTRIES_DIR / "IN.yaml")
+    out_dir = tmp_path / "out"
+    identical_markdown = _valid_pack_markdown(manifest, in_country)
+    _write_pack(out_dir, "IN", identical_markdown)
+    _write_pack(out_dir, "KE", identical_markdown)
+
+    report = service.integrity_report(["IN", "KE"], manifest=manifest, out_dir=out_dir)
+
+    assert report["annex_divergence"] == {
+        "reporting": "1 distinct",
+        "legal": "1 distinct",
+        "escalation": "1 distinct",
+    }
