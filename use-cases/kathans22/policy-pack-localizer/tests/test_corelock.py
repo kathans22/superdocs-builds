@@ -96,3 +96,13 @@ def test_roundtrip_survives_list_marker_style():
     clean = "Reports may include:\n- item one\n- item two"
     noisy = "Reports may include:\n* item one\n• item two"
     assert _lock_of(clean)["core_hash"] == _lock_of(noisy)["core_hash"]
+
+
+def test_lock_exists_is_false_before_save_and_true_after(tmp_path, monkeypatch):
+    monkeypatch.setattr(corelock, "STATE_DIR", tmp_path)
+
+    assert corelock.lock_exists(core_version=1, language="fr") is False
+
+    corelock.save_lock(_lock_of("Some translated core text.") | {"language": "fr"})
+
+    assert corelock.lock_exists(core_version=1, language="fr") is True

@@ -48,6 +48,10 @@ def _extract_core_sections(markdown_text: str, manifest: dict) -> list[dict]:
     return [s for s in all_sections if s["number"] in core_numbers]
 
 
+def _content_key(core_version: int, language: str) -> str:
+    return f"translate:{language}:v{core_version}"
+
+
 async def derive_core(
     language: str,
     *,
@@ -57,11 +61,16 @@ async def derive_core(
 ) -> dict:
     """Translate the core sections into `language`, hash them, and lock them.
 
-    Upload is free; the chat call that applies the translation is the one
-    billed step; export is free. The extracted core sections are hashed and
-    written to state/core-lock-v{version}-{lang}.json via the same
-    corelock.lock()/save_lock() lock-time path the source language uses
-    (service.lock_core) — one lock format, one place that produces it.
+    Cached by (core_version, language): a call for a language already locked
+    at this core_version makes no SuperDocs call at all and spends no
+    operation — it loads the existing lock from disk instead. A second (or
+    Nth) country sharing a language is free; only the first call for a given
+    (core_version, language) pair is ever billed. Upload is free; the chat
+    call that applies the translation is the one billed step; export is
+    free. The extracted core sections are hashed and written to
+    state/core-lock-v{version}-{lang}.json via the same corelock.lock()/
+    save_lock() lock-time path the source language uses (service.lock_core)
+    — one lock format, one place that produces it.
     """
     ledger = ledger if ledger is not None else Ledger()
     manifest = manifest if manifest is not None else config_module.load_manifest()
@@ -72,6 +81,16 @@ async def derive_core(
             "policy-master.md via service.lock_core(), not by translation. "
             "derive_core is for every language other than the source."
         )
+
+    core_version = manifest["core_version"]
+    content_key = _content_key(core_version, language)
+
+    if ledger.already_charged(content_key) and corelock.lock_exists(core_version, language):
+        ledger.record(
+            "translate", language, chat_calls=0, wall_time=0.0,
+            content_key=content_key, output_exists=True,
+        )
+        return corelock.load_lock(core_version, language)
 
     instruction = _build_translation_instruction(manifest, language)
     session_id = f"translate-{language}"
@@ -101,6 +120,15 @@ async def derive_core(
         )
 
     core_sections = _extract_core_sections(markdown_text, manifest)
-    lock_data = corelock.lock(core_sections, manifest["core_version"], language)
+    lock_data = corelock.lock(core_sections, core_version, language)
     corelock.save_lock(lock_data)
+
+    # Marks this content_key as charged for future idempotency checks, without
+    # adding to total_operations a second time — the actual operation was
+    # already counted by the chat step above (mirrors packs.generate_pack).
+    ledger.record(
+        "translate", language, chat_calls=0, wall_time=0.0,
+        content_key=content_key, output_exists=False,
+    )
+
     return lock_data

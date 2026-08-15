@@ -152,3 +152,38 @@ def test_derive_core_costs_exactly_one_operation(tmp_path, monkeypatch):
     )
 
     assert ledger.total_operations == 1
+
+
+def test_derive_core_is_cached_by_core_version_and_language(tmp_path, monkeypatch):
+    manifest = _manifest()
+    monkeypatch.setattr(corelock, "STATE_DIR", tmp_path)
+    ledger = Ledger()
+    fake_client = _TranslatingFakeClient(manifest)
+    kwargs = dict(ledger=ledger, manifest=manifest, client_factory=lambda: fake_client)
+
+    first = asyncio.run(translate.derive_core("fr", **kwargs))
+    calls_after_first = len(fake_client.calls)
+    ops_after_first = ledger.total_operations
+
+    second = asyncio.run(translate.derive_core("fr", **kwargs))
+
+    assert len(fake_client.calls) == calls_after_first  # no new SuperDocs calls
+    assert ledger.total_operations == ops_after_first  # still 1, never 2
+    assert second == first  # the identical locked text is reused, not re-derived
+
+
+def test_derive_core_re_runs_when_the_lock_file_is_missing(tmp_path, monkeypatch):
+    # Mirrors packs.generate_pack's idempotency guard: a stale ledger entry
+    # with no lock file actually on disk must not skip real work.
+    manifest = _manifest()
+    monkeypatch.setattr(corelock, "STATE_DIR", tmp_path)
+    ledger = Ledger()
+    content_key = translate._content_key(manifest["core_version"], "fr")
+    ledger.record("translate", "fr", chat_calls=0, wall_time=0.0, content_key=content_key)
+    fake_client = _TranslatingFakeClient(manifest)
+
+    asyncio.run(
+        translate.derive_core("fr", ledger=ledger, manifest=manifest, client_factory=lambda: fake_client)
+    )
+
+    assert len(fake_client.calls) > 0

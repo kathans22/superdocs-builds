@@ -127,6 +127,16 @@ def load_lock(core_version: int, language: str) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def lock_exists(core_version: int, language: str) -> bool:
+    """True if a lock file for this core_version/language is already on disk.
+
+    Used as the artifact-presence half of an idempotency check (paired with
+    a ledger content_key check) — a persisted ledger entry alone is not
+    proof the lock survived, e.g. a wiped state/ directory.
+    """
+    return _lock_path(core_version, language).exists()
+
+
 def verify(sections: list[dict], lock_data: dict) -> dict:
     """Recompute core section hashes and compare against a lock.
 
