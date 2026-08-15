@@ -2,6 +2,14 @@ policy_title: "Meridian Relief Trust — Safeguarding Policy"
 source_language: en
 core_version: 1
 
+# Max annex sections SuperDocs' chat tool reliably edits in one call. Proven
+# live: 1, 2, and 3 sections in one call all land correctly; 4 does not (the
+# tool reports success but changes nothing — see PROGRESS.md). Kept below
+# that proven boundary deliberately, and as config rather than a code
+# constant, because it is a live, undocumented API characteristic that can
+# shift — see evidence/superdocs-batch-limit-report.md.
+annex_batch_size: 2
+
 sections:
   - number: 1
     heading: "Purpose and Commitment"

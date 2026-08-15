@@ -41,6 +41,12 @@ def _validate_manifest(manifest: dict, path: Path) -> None:
         raise ValueError(f"{path}: missing 'sections'")
     if "source_language" not in manifest:
         raise ValueError(f"{path}: missing 'source_language'")
+    if not isinstance(manifest.get("annex_batch_size"), int) or manifest["annex_batch_size"] < 1:
+        raise ValueError(
+            f"{path}: 'annex_batch_size' must be a positive integer. This is a live, "
+            "undocumented SuperDocs API characteristic (see evidence/superdocs-batch-limit-"
+            "report.md), not a code constant — it must be set explicitly, not assumed."
+        )
 
     sections = manifest["sections"]
     for section in sections:
