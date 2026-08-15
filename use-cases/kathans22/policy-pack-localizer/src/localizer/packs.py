@@ -367,11 +367,20 @@ async def generate_pack(
 
         verification = verify_pack(markdown_text, manifest, country["language"])
         if not verification["passed"]:
+            # Quarantined, not dropped: the failing export is preserved for
+            # inspection at QUARANTINE_DIR, never at the real out/{code}/ path
+            # a passing pack would use. The run still does not report success.
+            quarantine_filename = next(filename for fmt, filename in _EXPORT_FILES if fmt == "markdown")
+            quarantine_path = await _write_export(
+                markdown_export,
+                out_dir / "_quarantine" / country_code / quarantine_filename,
+                "markdown",
+            )
             raise PackIntegrityError(
-                f"{country_code} pack failed verification and was quarantined — "
-                f"core: {verification['core']}, "
+                f"{country_code} pack failed verification and was quarantined to "
+                f"{quarantine_path} — core: {verification['core']}, "
                 f"unlocalised annex sections: {verification['unlocalised_annex_sections']}. "
-                "Not exported; the run does not report success for this country."
+                "Not exported to out/; the run does not report success for this country."
             )
 
         markdown_filename = next(filename for fmt, filename in _EXPORT_FILES if fmt == "markdown")
