@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import unicodedata
 
@@ -70,3 +71,35 @@ def normalise(text: str) -> str:
     normalised = _TRAILING_WS_RE.sub("", normalised)
     normalised = _INLINE_WS_RE.sub(" ", normalised)
     return normalised.strip()
+
+
+def lock(sections: list[dict], core_version: int, language: str) -> dict:
+    """Hash each core section and derive one core_hash over all of them.
+
+    `sections` must already be filtered to core-role sections, in document
+    order — this function does not consult the manifest to decide what is
+    core. Each section's body is hashed individually (SHA-256 of its
+    normalised text), and core_hash is the SHA-256 of the normalised
+    section bodies joined in order, so any reordering of core sections
+    changes core_hash even if no individual section body changed.
+    """
+    section_hashes = {}
+    ordered_normalised = []
+    for section in sections:
+        normalised_body = normalise(section["body"])
+        section_hashes[str(section["number"])] = hashlib.sha256(
+            normalised_body.encode("utf-8")
+        ).hexdigest()
+        ordered_normalised.append(normalised_body)
+
+    core_hash = hashlib.sha256(
+        "\n\n".join(ordered_normalised).encode("utf-8")
+    ).hexdigest()
+
+    return {
+        "core_version": core_version,
+        "language": language,
+        "section_numbers": [s["number"] for s in sections],
+        "section_hashes": section_hashes,
+        "core_hash": core_hash,
+    }
