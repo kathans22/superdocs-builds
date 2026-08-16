@@ -480,6 +480,75 @@ code {
   color: var(--text-h);
 }
 
+/* ---- packs ---- */
+
+.pack-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+
+.pack-id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.pack-hash {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.pack-exports {
+  display: flex;
+  gap: 12px;
+  justify-self: end;
+}
+
+.pack-exports a {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.pack-exports a:hover {
+  text-decoration: underline;
+}
+
+.pack-not-generated {
+  grid-column: 2 / span 2;
+  font-family: var(--mono);
+  font-size: 13px;
+  text-align: right;
+  color: var(--text);
+}
+
+.pack-row.pending .pack-id {
+  color: var(--text);
+  font-weight: 400;
+}
+
+@media (max-width: 640px) {
+  .pack-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .pack-exports,
+  .pack-not-generated {
+    justify-self: start;
+    text-align: left;
+    grid-column: auto;
+  }
+}
+
 /* ---- loading / error ---- */
 
 .load-error {

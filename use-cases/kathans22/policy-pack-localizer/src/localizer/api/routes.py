@@ -11,6 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 from .. import config as config_module
+from .. import corelock
 from .. import packs
 from .. import service
 from . import runs as runs_module
@@ -71,25 +72,60 @@ def list_countries() -> list[dict]:
 @router.get("/packs")
 def list_packs() -> list[dict]:
     """Every configured country, with whether its pack has actually been
-    generated (files present in out/) — not just requested."""
+    generated (files present in out/) — not just requested. A generated
+    pack carries its own core_hash (recomputed from its export, same as
+    /packs/{code}) and links to its exported files under /exports."""
     countries = config_module.load_all_countries()
+    manifest = config_module.load_manifest()
     generated = set(_generated_country_codes())
-    return [
-        {"code": code, "country": country["country"], "language": country["language"], "generated": code in generated}
-        for code, country in countries.items()
-    ]
+
+    entries = []
+    for code, country in countries.items():
+        entry = {
+            "code": code,
+            "country": country["country"],
+            "language": country["language"],
+            "generated": code in generated,
+        }
+        if code in generated:
+            verification = service.verify(code, manifest=manifest)
+            entry["core_hash"] = corelock.lock(
+                verification["exported_core_sections"], manifest["core_version"], country["language"]
+            )["core_hash"]
+            entry["exports"] = {fmt: f"/exports/{code}/{filename}" for fmt, filename in packs._EXPORT_FILES}
+        entries.append(entry)
+    return entries
 
 
 @router.get("/packs/{code}")
 def get_pack(code: str) -> dict:
     """Re-verify one country's already-generated pack against its locked
     core — the same check packs.verify_pack runs after generation, run
-    again here on demand rather than trusting a cached result."""
-    if code not in config_module.load_all_countries():
+    again here on demand rather than trusting a cached result.
+
+    `core_hash` is recomputed from the pack's own exported core sections,
+    through corelock.lock() — the same function lock time and integrity_report
+    both use — never a second hashing path."""
+    countries = config_module.load_all_countries()
+    if code not in countries:
         raise HTTPException(status_code=404, detail=f"No configured country {code!r}.")
     if code not in _generated_country_codes():
         raise HTTPException(status_code=404, detail=f"No generated pack for {code!r} yet.")
-    return service.verify(code)
+
+    manifest = config_module.load_manifest()
+    verification = service.verify(code, manifest=manifest)
+    language = countries[code]["language"]
+    core_hash = corelock.lock(
+        verification["exported_core_sections"], manifest["core_version"], language
+    )["core_hash"]
+
+    return {
+        "code": code,
+        "passed": verification["passed"],
+        "core": verification["core"],
+        "unlocalised_annex_sections": verification["unlocalised_annex_sections"],
+        "core_hash": core_hash,
+    }
 
 
 @router.get("/integrity")
