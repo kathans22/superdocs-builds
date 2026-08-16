@@ -549,6 +549,50 @@ code {
   }
 }
 
+/* ---- amend: diff / verification / notices ---- */
+
+.diff p {
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+.verify-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.notice-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.notice-status {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.notice-row a {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.notice-row a:hover {
+  text-decoration: underline;
+}
+
 /* ---- loading / error ---- */
 
 .load-error {
