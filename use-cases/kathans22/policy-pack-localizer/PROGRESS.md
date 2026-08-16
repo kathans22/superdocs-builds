@@ -599,3 +599,122 @@ Countries screen; a `core_hash` and `/exports/{code}/...` links added to `GET /p
    still carries local filesystem `Path`s, not the `/exports`-relative form. Works because the
    convention is fixed and was proven live, but it is a convention the client knows, not a
    contract the API states.
+
+## Phase 8 — Ship (Session 9, Prompts 25–28)
+
+The round's final phase: README, one-command deploy, a secret/hygiene sweep, and PR prep.
+
+**Prompt 25 — README.** Written from `PROGRESS.md`, `CLAUDE.md`, and the real
+`evidence/integrity-report.json`, in five commits: what it does / setup / run commands;
+SuperDocs features used + the per-language core derivation diagram; the real Run 1 and
+Run 2 ledger tables; a three-row "what strong looks like → mechanism → proof" table; and
+the seven logged decisions plus honest limitations. One correction made while writing it:
+the ledger section initially copied the design doc's original 7-op idealised Run 1
+figure, but CLAUDE.md's own economics section had already corrected a pack's idealised
+cost to 2 batched operations (12 total) after the live batching-bug fix — the README now
+states the corrected 12-vs-7 comparison and logs the discrepancy explicitly rather than
+silently keeping the stale, symmetrical-looking 7-vs-7 figure.
+
+**Prompt 26 — one documented command.** `Dockerfile`, `ui/Dockerfile`, `docker-compose.yml`
+bring up the API (`:8000`) and UI (`:5173`) together; the UI's Vite dev-proxy target
+became env-configurable (`VITE_API_PROXY_TARGET`) so it can resolve `api` by Compose
+service name instead of `127.0.0.1`. Verified against a genuine clean-clone simulation
+(git-tracked files copied to a scratch directory, then only the documented commands run)
+rather than trusted from reading the compose file: found and fixed two real gaps before
+declaring it done —
+1. With no startup check, `docker compose up` reported both containers healthy while the
+   API was completely unable to reach SuperDocs; the failure only surfaced minutes later,
+   buried in a background rollout's poll response. Fixed with `docker-entrypoint.sh`,
+   which fails fast with the exact variable name and fix before uvicorn ever binds a
+   port — verified live both ways (missing key → clean exit 1 in `docker compose up`'s
+   own log; a key-shaped value → starts normally).
+2. Git on Windows warned it would rewrite `docker-entrypoint.sh` to CRLF on next touch,
+   which would break its shebang inside the Linux container on a future checkout — caught
+   and fixed forward with `.gitattributes` (`*.sh text eol=lf`) in the same session,
+   before it could bite a real clone, not after.
+`out/` and `state/` need no manual `mkdir` — confirmed live: Docker creates the bind-mount
+targets, and the app creates them on first write. README's "How to run it" now leads with
+the one-command Docker path; the original manual Python/Node setup is kept as a
+documented alternative for local dev, not removed.
+
+**Prompt 27 — secret and hygiene sweep.** Searched the full working tree and the entire
+branch history (`git log --all -p`) for real API keys, real emails, real personal data,
+absolute machine paths, and hardcoded per-country logic outside `config/`. Result: clean,
+with one confirmed exception the user explicitly chose to leave in place — every commit's
+author metadata carries the user's real email (`git config user.email`, not file content;
+zero hits in any added-line diff across the whole history). `.env.example` confirmed
+placeholder-only; `.env` confirmed gitignored and absent from disk. Two minor,
+non-blocking notes logged: an untracked, never-committed local `.claude/settings.local.json`
+carries a real SuperDocs GCS service-account address and time-limited pre-signed URLs from
+live testing sessions (never entered git); `tests/fixtures/proposed-change-raw.json`
+carries an opaque SuperDocs account UUID (`user_id`), not personally identifying. Sweep
+found nothing requiring a code-content removal commit.
+
+**Prompt 28 — pull request prep.** Checked the build against `CONTRIBUTING.md` line by
+line: folder path (`use-cases/kathans22/policy-pack-localizer/`, matches the required
+pattern exactly), scope (`git diff --stat main...HEAD` — all 80 changed files inside the
+folder, zero outside), licensing (repo-root `LICENSE` is MIT; README's License section
+now links to it explicitly), and all four required README sections. One small alignment
+commit — the README didn't cite the repo-root license or `CONTRIBUTING.md` by name.
+Everything else was already compliant; nothing was invented to fill a commit.
+
+### What shipped
+
+- The full pipeline: core locking, per-language translation (cached), per-country pack
+  generation with batched-and-verified annex edits, deterministic acknowledgement forms,
+  and the amendment path (section-level diff → per-language re-translation of only the
+  changed section(s) → per-country change notice), all driven over SuperDocs MCP, all
+  enforced by hash verification rather than trusted from any response.
+- **The central proof, live-verified, not asserted:** France and Senegal — two countries,
+  two entirely different annexes — carry byte-identical core text
+  (`evidence/integrity-report.json`).
+- A real, itemised Run 1 (rollout) vs. Run 2 (amendment) ledger comparison: 9 real
+  operations to propagate a core change to all five offices with **zero packs
+  reissued**, against a idealised-model 12 ops to stand the whole rollout up once.
+- A FastAPI backend (8 routes) and a 5-screen React UI (Countries, Generate, Packs,
+  Integrity, Amend), both thin layers over the same `service.py` the CLI calls — nothing
+  reimplemented per surface.
+- 51 passing tests against recorded fixtures and fakes, no live key required.
+- One-command Docker Compose deployment, verified against an actual clean-clone
+  simulation, with a fail-fast startup check naming the exact fix for a missing API key.
+- A README carrying the real ledger tables, the core-derivation diagram, the
+  bar-to-mechanism-to-proof table, all seven logged decisions, and an honest limitations
+  section — not a feature list.
+
+### What did not ship
+
+- **The Integrity screen's UI reads a static snapshot file**, not a live
+  `GET /api/integrity` call — the one screen out of five that isn't fully live.
+- **No run-cancellation** in the API or UI — a started rollout/amendment runs to
+  completion or failure; only idempotent *resume* exists, not in-flight *interrupt*.
+- **No auth on the API** — acceptable for a local demo against a personal key, not for
+  anything reachable past localhost.
+- **No client-side (React) tests** — all five screens were verified manually, live,
+  against the real API; the Python side is fully covered, the UI side is not.
+- **The demo video and screenshot are still placeholders** in the README — the build
+  itself is done and verified live throughout every phase, but the recorded artifact
+  CONTRIBUTING.md asks for ("if you have one") was not produced in this session.
+- Clause-level re-translation for amendments — section-level diffing means a purely
+  cosmetic wording drift between two independent translation calls of the same unchanged
+  English clause (observed live in Brazil's Portuguese notice) can read to an office as
+  if a rule changed when only its wording did.
+
+### What I would do next, with more time
+
+1. **Wire the Integrity screen to `GET /api/integrity` live**, closing the one gap
+   between it and the other four screens — it's the hero screen and the only one still
+   reading a snapshot file.
+2. **Parallelise `service.run` across countries.** Nothing in the design requires
+   sequential per-country processing; each pack is an independent SuperDocs session. This
+   is the one thing flagged in the README that would matter most at real scale (fifty
+   countries would currently take roughly ten times as long, wall-clock, as five).
+3. **Clause-level diffing for amendments**, or an explicit instruction to the
+   change-notice summary step to ignore purely cosmetic wording deltas between two
+   independent translation calls of unchanged English text — the one concrete
+   translation-quality risk this build found live and documented but didn't fix.
+4. **A run-cancellation endpoint and UI control**, closing the gap against B2 read as
+   requiring in-flight interrupt, not just resume.
+5. **Minimal API auth** (even a static bearer token) before this ever runs anywhere past
+   localhost — currently anyone reaching port 8000 can spend real SuperDocs operations.
+6. Record the actual demo video and take the actual screenshot the README still
+   placeholders — the last purely mechanical gap before the PR is fully submission-ready.
