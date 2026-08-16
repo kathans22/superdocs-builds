@@ -39,10 +39,37 @@ live-verified hashes.
 
 ## How to run it
 
-Requires Python 3.12+, Node 18+, and a SuperDocs API key
-(`SUPERDOCS_API_KEY=your-key-here` — see `.env.example`).
+Requires Docker (with Compose) and a SuperDocs API key.
 
-### Backend
+### The one command
+
+```bash
+cd use-cases/kathans22/policy-pack-localizer
+cp .env.example .env   # then edit .env: set SUPERDOCS_API_KEY to your real key
+docker compose up --build
+```
+
+That's it — the API comes up on `http://localhost:8000` and the UI on
+`http://localhost:5173`, with the UI already talking to the API (its dev-server proxy
+targets the `api` container by service name, not `localhost`, inside the Compose
+network). Fresh clone to a working UI takes a few minutes, mostly Docker build time on
+the first run; a second `docker compose up` with no code changes comes up in seconds.
+
+If `.env` is missing or `SUPERDOCS_API_KEY` is still the placeholder value, the `api`
+container **fails immediately** with a message naming the exact variable and the exact
+fix — not a stack trace, and not a container that reports healthy while silently unable
+to do anything: `docker compose up` used to leave that failure hidden until you clicked
+through the UI to a rollout and it produced an unclear error later. See
+`docker-entrypoint.sh`.
+
+No manual `mkdir` needed: `out/` and `state/` (bind-mounted into the API container so
+generated packs and locks land on your host, in the same places the CLI writes them)
+are created automatically on first write, by the app and by Docker itself for the
+bind mounts — a fresh clone has neither directory, and nothing errors on that.
+
+### Running it without Docker (local dev)
+
+Requires Python 3.12+ and Node 18+ directly on your machine instead.
 
 ```bash
 cd use-cases/kathans22/policy-pack-localizer
@@ -51,7 +78,8 @@ pip install -e ".[dev]"
 cp .env.example .env   # fill in SUPERDOCS_API_KEY
 ```
 
-Run the full pipeline for one or more countries from the command line:
+Run the full pipeline for one or more countries from the command line, with no API or
+UI involved at all:
 
 ```bash
 python -m localizer run --countries IN,KE,FR,SN,BR
@@ -73,7 +101,7 @@ Serve the API (used by the React UI, and drives rollouts/amendments as backgroun
 uvicorn localizer.api.app:app --reload --port 8000
 ```
 
-### Frontend
+In a second terminal:
 
 ```bash
 cd ui
