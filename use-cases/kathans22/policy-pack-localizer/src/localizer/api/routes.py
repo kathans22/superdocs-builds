@@ -158,13 +158,17 @@ def get_run_status(run_id: str) -> dict:
 
 @router.get("/runs/{run_id}/ledger")
 def get_run_ledger(run_id: str) -> dict:
-    """The operations this specific run actually spent, step by step — not
-    the whole account's cumulative ledger. Entries are the slice of
-    state/ledger.json written during this run only (runs.execute_rollout /
-    execute_amendment record the entry count before the run starts and
-    slice from there), so two runs never double-report each other's cost."""
+    """The operations this specific run has actually spent so far, step by
+    step — not the whole account's cumulative ledger, and not a snapshot
+    frozen at the end. `run.ledger` is the same Ledger instance the
+    background coroutine is still writing to while the run is `running`,
+    sliced from the entry count at the moment this run started (so two
+    runs never double-report each other's cost) — polling this while a
+    rollout or amendment is still in progress shows entries landing as
+    each country's operation actually completes."""
     run = runs_module.get_run(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail=f"No run {run_id!r}.")
-    total_operations = sum(entry["operations"] for entry in run.ledger_entries)
-    return {"run_id": run_id, "status": run.status, "entries": run.ledger_entries, "total_operations": total_operations}
+    entries = run.ledger_entries()
+    total_operations = sum(entry["operations"] for entry in entries)
+    return {"run_id": run_id, "status": run.status, "entries": entries, "total_operations": total_operations}

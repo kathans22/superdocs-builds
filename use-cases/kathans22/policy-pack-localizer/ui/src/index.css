@@ -360,6 +360,126 @@ code {
   }
 }
 
+/* ---- generate ---- */
+
+.generate-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.generate-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.generate-checkbox input {
+  accent-color: var(--accent);
+}
+
+.generate-controls {
+  display: flex;
+  align-items: end;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.generate-limit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+
+.generate-limit input {
+  font-family: var(--mono);
+  font-size: 14px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+  color: var(--text-h);
+  width: 120px;
+}
+
+.generate-run {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 9px 18px;
+  border-radius: 4px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.generate-run:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.run-status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.run-status-row code {
+  font-size: 13px;
+}
+
+/* ---- ledger ---- */
+
+.ledger p {
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+.ledger-row {
+  display: grid;
+  grid-template-columns: 140px 1fr auto;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.ledger-step {
+  color: var(--text);
+}
+
+.ledger-subject {
+  color: var(--text-h);
+}
+
+.ledger-ops {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger-total {
+  border-top: 1px solid var(--text-h);
+  font-weight: 600;
+}
+
+.ledger-total .ledger-subject,
+.ledger-total .ledger-ops {
+  color: var(--text-h);
+}
+
 /* ---- loading / error ---- */
 
 .load-error {

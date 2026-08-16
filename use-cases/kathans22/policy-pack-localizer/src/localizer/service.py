@@ -247,13 +247,20 @@ async def run(
     *,
     limit: int | None = None,
     out_dir: Path = packs.OUT_DIR,
+    ledger: Ledger | None = None,
 ) -> dict:
     """Lock the core, then generate a pack per country (respecting --limit).
 
     Loads the persisted ledger so a resumed run does not double-count, and
     saves it back at the end. This is what the CLI's `run` command calls.
+
+    A caller may pass its own `ledger` instead (e.g. the API's background
+    run tracker, which holds a reference to it so a concurrent status
+    request can read live entries while this coroutine is still running —
+    the same object is mutated in place by every `ledger.record()` call
+    made deep inside `generate()`/`packs.generate_pack`).
     """
-    ledger = Ledger.load()
+    ledger = ledger if ledger is not None else Ledger.load()
     manifest = config_module.load_manifest()
 
     lock_core(manifest=manifest)
@@ -271,6 +278,7 @@ async def run_amendment(
     country_codes: list[str],
     *,
     client_factory=SuperDocsClient,
+    ledger: Ledger | None = None,
 ) -> dict:
     """Propagate a core amendment to a set of countries: re-lock the core in
     every language they use, send each country its own change notice, then
@@ -281,9 +289,10 @@ async def run_amendment(
 
     Loads the persisted ledger so a resumed run does not double-count, and
     saves it back at the end — the same discipline `run()` applies to a
-    rollout.
+    rollout. A caller may pass its own `ledger` for the same live-read
+    reason documented on `run()`.
     """
-    ledger = Ledger.load()
+    ledger = ledger if ledger is not None else Ledger.load()
     manifest = config_module.load_manifest()
 
     relocked = await relock_v2(manifest=manifest, ledger=ledger, client_factory=client_factory)

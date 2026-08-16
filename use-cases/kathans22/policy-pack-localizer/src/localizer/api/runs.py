@@ -43,7 +43,17 @@ class Run:
     finished_at: str | None = None
     result: dict | None = None
     error: str | None = None
-    ledger_entries: list[dict] = field(default_factory=list)
+
+    # The exact Ledger instance the background coroutine is mutating, plus
+    # the entry count at the moment this run started (other runs, or a
+    # prior resumed run, may already have entries in the same persisted
+    # ledger). Reading `ledger.entries[ledger_baseline:]` from a concurrent
+    # request sees genuinely live progress — Python's asyncio is
+    # single-threaded and cooperative, so a status/ledger GET handler and
+    # this run's coroutine interleave on the same event loop rather than
+    # racing; the list is never read mid-mutation.
+    ledger: Ledger | None = None
+    ledger_baseline: int = 0
 
     def to_summary(self) -> dict:
         return {
@@ -53,6 +63,11 @@ class Run:
             "created_at": self.created_at,
             "finished_at": self.finished_at,
         }
+
+    def ledger_entries(self) -> list[dict]:
+        if self.ledger is None:
+            return []
+        return [asdict(e) for e in self.ledger.entries[self.ledger_baseline :]]
 
 
 # In-process only: a run's status does not survive a restart. Acceptable
@@ -75,12 +90,13 @@ def get_run(run_id: str) -> Run | None:
 
 async def execute_rollout(run_id: str, country_codes: list[str], limit: int | None) -> None:
     run = _RUNS[run_id]
+    ledger = Ledger.load()
+    run.ledger = ledger
+    run.ledger_baseline = len(ledger.entries)
     run.status = "running"
-    baseline = len(Ledger.load().entries)
     try:
-        outcome = await service.run(country_codes, limit=limit)
+        outcome = await service.run(country_codes, limit=limit, ledger=ledger)
         run.result = _jsonable({"results": outcome["results"]})
-        run.ledger_entries = [asdict(e) for e in outcome["ledger"].entries[baseline:]]
         run.status = "done"
     except Exception as exc:  # noqa: BLE001 — a run's own failure must not crash the process
         run.status = "error"
@@ -91,10 +107,12 @@ async def execute_rollout(run_id: str, country_codes: list[str], limit: int | No
 
 async def execute_amendment(run_id: str, country_codes: list[str]) -> None:
     run = _RUNS[run_id]
+    ledger = Ledger.load()
+    run.ledger = ledger
+    run.ledger_baseline = len(ledger.entries)
     run.status = "running"
-    baseline = len(Ledger.load().entries)
     try:
-        outcome = await service.run_amendment(country_codes)
+        outcome = await service.run_amendment(country_codes, ledger=ledger)
         run.result = _jsonable(
             {
                 "diff": outcome["diff"],
@@ -102,7 +120,6 @@ async def execute_amendment(run_id: str, country_codes: list[str]) -> None:
                 "verification": outcome["verification"],
             }
         )
-        run.ledger_entries = [asdict(e) for e in outcome["ledger"].entries[baseline:]]
         run.status = "done"
     except Exception as exc:  # noqa: BLE001 — a run's own failure must not crash the process
         run.status = "error"
