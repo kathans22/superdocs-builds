@@ -286,6 +286,19 @@ whole rollout once, versus **9 real ops to propagate one core change to all five
 with zero reissues** — an update that costs a fraction of standing the system up, which
 is the claim this build exists to prove.
 
+## What strong looks like, mapped to mechanism
+
+The task brief states the bar verbatim: "Protected core text is identical across all
+packs, annexes are genuinely country-specific, and a core amendment produces a
+per-country change notice rather than a full reissue." Each row below is a claim, the
+mechanism that makes it true, and where to find the proof rather than the assertion.
+
+| The bar | The mechanism | The proof |
+|---|---|---|
+| Protected core identical across all packs | Core sections are never named in any edit instruction (`assert_no_core_sections_named` is a hard stop before any call is sent); after every export, the core is re-extracted, re-hashed, and compared against the per-language lock — never trusted from the response | `evidence/integrity-report.json`: FR and SN both `a240052d99…`; IN and KE both `aa3a7460e6…`; `all_packs_pass: true` |
+| Annexes genuinely country-specific | Every country's reporting channel, applicable law, and escalation tier is real, distinct data in its own YAML file — not a template with a swapped name — and divergence is counted by content hash after export, not claimed from a country label | `evidence/integrity-report.json`: `annex_divergence` — `reporting: 5 distinct`, `legal: 5 distinct`, `escalation: 5 distinct` |
+| Core amendment → per-country change notice, not a full reissue | Section-level diff (`amend.diff_core_versions`) isolates exactly which sections changed; only affected sections are re-translated, once per language; a short notice is generated per country; `service.verify_after_amendment` re-checks all five existing packs against the version they actually carry — no `generate_pack` call fires anywhere in the amendment path | `evidence/run2-ledger.md`: 9 ops, 5 notices generated, **zero packs reissued**; `service.verify_after_amendment` confirms all five packs still pass against v1 |
+
 ## Credit
 
 Built by Kathan Shah (`kathans22`) for the SuperDocs Round 2 hiring task.
