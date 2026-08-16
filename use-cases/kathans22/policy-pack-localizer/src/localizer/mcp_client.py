@@ -144,11 +144,15 @@ class SuperDocsClient:
                 logger.info("SuperDocs tool '%s' completed in %.1fs", name, elapsed)
                 break
 
-        if result.isError:
+        is_error = getattr(result, "is_error", getattr(result, "isError", False))
+        if is_error:
             detail = _first_text(result.content) or "no error detail returned"
             raise SuperDocsClientError(f"SuperDocs tool '{name}' returned an error: {detail}")
-        if result.structuredContent is not None:
-            return result.structuredContent
+        structured_content = getattr(
+            result, "structured_content", getattr(result, "structuredContent", None)
+        )
+        if structured_content is not None:
+            return structured_content
         text = _first_text(result.content)
         if text is None:
             return {}
