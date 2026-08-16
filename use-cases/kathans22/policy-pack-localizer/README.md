@@ -89,6 +89,81 @@ see Limitations). Five screens: Countries, Generate, Packs, Integrity, Amend.
 - Video: `[demo link placeholder]`
 - Screenshot: `[screenshot placeholder — Integrity screen, the hero shot]`
 
+## SuperDocs features used
+
+All four calls of the minimum contract, over MCP (`api.superdocs.app/mcp`, streamable HTTP,
+Bearer auth) — never REST, and never a reimplementation of SuperDocs' own editing:
+
+- **`upload_document_base64`** — loads `config/policy-master.md` (and, for a non-English
+  pack, that language's locked core assembled with the country's own annexes) into a
+  session. Loading a document is free.
+- **`chat`** — the only billed step. Two distinct uses, deliberately kept separate:
+  - *Annex localisation*: edit instructions name only annex sections (6–9), sent in
+    `annex_batch_size`-sized batches per `config/manifest.yaml`. Core sections are never
+    named in any instruction sent to SuperDocs.
+  - *Core translation*: the one legitimate place in the codebase that names core sections
+    — structurally isolated in `translate.py`, which never imports `packs.py`, so
+    `packs.assert_no_core_sections_named` can never see it.
+  - Also used, as a documented fallback (`chat(document_html=...)`), to load a verbatim
+    corrected document back in when a natural-language edit repeatedly failed to land on
+    a specific chunk — a document load, not an AI edit, so it is free.
+- **`export_document`** — every pack, acknowledgement form, and change notice is exported
+  to Markdown and DOCX. Exports never cost operations, so verification (re-extract,
+  re-hash, compare) always runs against the real exported artifact, never the chat
+  response's own claim.
+- **Double-parse handling** — `mcp_client.parse_proposed_changes()` handles both the
+  already-an-object shape (`document_changes.pending_changes` on a sync `chat` call) and
+  the double-encoded shape (`intermediate_responses[].content` as a JSON string, on the
+  `chat_async`/job path), so nothing downstream re-implements that parse.
+- **Operations ledger** (`ledger.py`) — every call is charged from the response's real
+  `usage.was_billable` / `usage.ops_charged` fields, never an assumed constant. A preview
+  call is free; only an applied edit is billed — discovered live, not documented.
+
+**Not used:** `chat_async` + `approve_change` for the pack/notice path. Live testing
+(Prompt 10) found `approve_change` only works against a `chat_async` job, not a
+synchronous `chat` preview — the docs describe it as the HITL partner for both without
+flagging that only the async path has something to approve against. This build uses
+synchronous `chat` with `approve_all` throughout instead, and enforces correctness by
+re-verifying the export afterward rather than trusting an approval step that doesn't
+actually gate anything on this path. Full detail:
+[`PROGRESS.md`](PROGRESS.md#phase-2), [`evidence/superdocs-batch-limit-report.md`](evidence/superdocs-batch-limit-report.md).
+
+## The per-language core derivation
+
+"Identical across all packs" and "in the working language" are in tension: a translated
+core cannot be byte-identical to the English source. The resolution is that core identity
+is **per-language**, not per-document — each language's core is derived exactly once and
+hash-locked, and every pack in that language carries that identical locked text.
+
+```
+                    English core (source, authoritative)
+                                    │
+                 ┌──────────────────┼──────────────────┐
+                 ▼                  ▼                  ▼
+             EN core             FR core             PT core
+          hash aa3a7460…       hash a240052d…      hash 4d339a73…
+            (locked)              (locked)             (locked)
+                 │                  │                     │
+         ┌───────┴───────┐  ┌───────┴───────┐             │
+         ▼               ▼  ▼               ▼             ▼
+      India (IN)     Kenya (KE)      France (FR)   Senegal (SN)   Brazil (BR)
+      hash aa3a…      hash aa3a…     hash a240…     hash a240…    hash 4d33…
+```
+
+**France and Senegal — two countries, two entirely different annexes — share one core
+hash.** That equality is not asserted; it is read directly off five independently
+generated, live-exported packs (`evidence/integrity-report.json`):
+
+| Language | Packs | Core hash | Identical? |
+|---|---|---|---|
+| en | IN, KE | `aa3a7460e6602b04e59acbe8ef73be464c3951624b50903a61b548ce64e186e8` | ✅ |
+| fr | FR, SN | `a240052d992b3f53af2332edd0ffe62172b87e6a963c3c8dd4dfef4d47dafa58` | ✅ |
+| pt | BR | `4d339a737d5ea69c3bfd38ee983f779243c219ba869e1e9df443bb98ef7cf9b8` | ✅ (n=1) |
+
+Annex divergence, counted the same way: `reporting` 5/5 distinct, `legal` 5/5 distinct,
+`escalation` 5/5 distinct — five countries producing five genuinely different annexes,
+not a name swapped into a shared paragraph.
+
 ## Credit
 
 Built by Kathan Shah (`kathans22`) for the SuperDocs Round 2 hiring task.
