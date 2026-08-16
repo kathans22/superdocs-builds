@@ -146,3 +146,17 @@ def get_run_status(run_id: str) -> dict:
     if run is None:
         raise HTTPException(status_code=404, detail=f"No run {run_id!r}.")
     return {**run.to_summary(), "result": run.result, "error": run.error}
+
+
+@router.get("/runs/{run_id}/ledger")
+def get_run_ledger(run_id: str) -> dict:
+    """The operations this specific run actually spent, step by step — not
+    the whole account's cumulative ledger. Entries are the slice of
+    state/ledger.json written during this run only (runs.execute_rollout /
+    execute_amendment record the entry count before the run starts and
+    slice from there), so two runs never double-report each other's cost."""
+    run = runs_module.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"No run {run_id!r}.")
+    total_operations = sum(entry["operations"] for entry in run.ledger_entries)
+    return {"run_id": run_id, "status": run.status, "entries": run.ledger_entries, "total_operations": total_operations}
