@@ -56,6 +56,23 @@ export default function Integrity() {
         Core v{report.core_version} · {report.packs} packs · {languageCounts}
       </p>
 
+      {report.quarantined_packs && report.quarantined_packs.length > 0 && (
+        <section className="quarantine">
+          <h2>Quarantined</h2>
+          <p>
+            Failed verification and were never shipped — a hash mismatch quarantines the pack;
+            it is not counted above and does not reach an office.
+          </p>
+          <div className="quarantine-packs">
+            {report.quarantined_packs.map((code) => (
+              <span key={code} className="pack-chip quarantine-chip">
+                {code}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="identity">
         <h2>Core identity, per language</h2>
         {languages.map(([lang, entry]) => (
@@ -72,6 +89,17 @@ export default function Integrity() {
               ))}
             </div>
             <div className="identity-state">{entry.identical ? 'IDENTICAL' : 'DIVERGENT'}</div>
+          </div>
+        ))}
+      </section>
+
+      <section className="divergence">
+        <h2>Annex divergence</h2>
+        <p>Counted, not claimed — how many distinct values exist per slot across every pack.</p>
+        {Object.entries(report.annex_divergence).map(([slot, count]) => (
+          <div key={slot} className="divergence-row">
+            <div className="divergence-slot">{slot}</div>
+            <div className="divergence-count">{count}</div>
           </div>
         ))}
       </section>

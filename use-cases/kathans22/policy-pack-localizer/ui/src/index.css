@@ -188,3 +188,55 @@ code {
 .load-error {
   color: #b3261e;
 }
+
+.quarantine {
+  margin-top: 32px;
+  padding: 16px 20px;
+  border: 1px solid #b3261e;
+  border-radius: 6px;
+  background: rgba(179, 38, 30, 0.08);
+}
+
+.quarantine h2 {
+  color: #b3261e;
+}
+
+.quarantine p {
+  margin-top: 8px;
+}
+
+.quarantine-packs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.quarantine-chip {
+  background: #b3261e;
+  color: #fff;
+}
+
+.divergence {
+  margin-top: 40px;
+}
+
+.divergence p {
+  margin-top: 4px;
+}
+
+.divergence-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.divergence-slot {
+  color: var(--text-h);
+  text-transform: capitalize;
+}
+
+.divergence-count {
+  font-family: var(--mono);
+}
