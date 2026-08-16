@@ -447,4 +447,5 @@ Built by Kathan Shah (`kathans22`) for the SuperDocs Round 2 hiring task.
 
 ## License
 
-MIT.
+MIT — published under `superdocs-builds`' repository-wide [`LICENSE`](../../../LICENSE),
+per `CONTRIBUTING.md`, credited to Kathan Shah.
