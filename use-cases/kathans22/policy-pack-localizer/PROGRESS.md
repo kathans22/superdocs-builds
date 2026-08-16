@@ -518,3 +518,84 @@ put in the README; the real, itemised 9-op Run 2 total belongs beside it as the 
    non-deterministic translator, not a bug in any single translation call. Not fixed in
    this session — would need either clause-level diffing or an explicit instruction to the
    summary call to ignore purely cosmetic wording differences.
+
+## Phase 7 — Surfaces (Session 8, Prompts 22–24)
+
+Both surfaces sit over `service.py` — the routes and the React screens are navigation onto
+functions the CLI already calls; neither reimplements lock/generate/verify/amend.
+
+**Prompt 22 — FastAPI routes.** `src/localizer/api/{app,routes,runs}.py`, served on 8000:
+`GET /countries`, `GET /packs`, `GET /packs/{code}`, `GET /integrity`, `POST /runs/rollout`,
+`POST /runs/amendment`, `GET /runs/{run_id}`, `GET /runs/{run_id}/ledger`. Long operations
+never block a request: a rollout/amendment is scheduled via `BackgroundTasks` and returns a
+run id immediately (proven live: ~70–100ms regardless of the underlying SuperDocs call
+time); the caller polls status instead. `service.run`/`service.run_amendment` gained an
+optional `ledger` parameter so the API's background-run tracker can hold the exact `Ledger`
+instance a run is writing to and read live entries mid-run — proven live on the Amend screen
+below, not just asserted.
+
+**Prompt 23 — the Integrity screen.** `ui/` scaffolded with Vite + React + TypeScript.
+`Integrity.tsx` is deliberately the only screen built with real design care in this prompt:
+core version/pack count/languages summary, one row per language (hash, owning-pack chips,
+identical/divergent state — FR and SN visibly sharing one hash), annex divergence counted
+per slot, and a loud red quarantine banner that renders only when a report ever carries
+`quarantined_packs` (verified with a temporary local mock, reverted before committing — the
+real `evidence/integrity-report.json` has never contained a quarantined pack). No component
+library, no charts, no dashboard chrome — a typographic pass (eyebrow-style section labels,
+tabular numerals, consistent spacing rhythm) was its own commit.
+
+**Prompt 24 — the remaining four screens: Countries, Generate, Packs, Amend**, plus a nav
+shell (`Nav.tsx`, `react-router-dom`), a thin `api.ts` fetch wrapper, and a Vite dev-server
+proxy (`/api/* → 127.0.0.1:8000`, `vite.config.ts`) so the browser never needs the backend to
+configure CORS. Backend additions were kept to exactly what each screen needed and landed in
+the same commit as the screen that needed them: `annex_summary` (legal instrument count,
+external reporting channel count, escalation tier 1) added to `GET /countries` for the
+Countries screen; a `core_hash` and `/exports/{code}/...` links added to `GET /packs` and
+`GET /packs/{code}` for the Packs screen, backed by a `StaticFiles` mount of `out/` at
+`/exports` in `app.py`.
+
+**What was proven live, not just built:**
+- **Countries** — real per-country divergence at a glance: Kenya shows 4 legal instruments
+  against 3 everywhere else, and every escalation tier-1 line reads distinctly.
+- **Packs** — India's `core_hash` displayed matches the Integrity screen's `en` hash exactly;
+  its `.md` export link opens the real generated pack through the `/exports` mount.
+- **Generate** — a real rollout POST, polled to an honest `ERROR` status with the exact
+  "`SUPERDOCS_API_KEY` is not set" message (this dev sandbox has no key wired to its own
+  process — same constraint noted since Prompt 10) and a ledger reporting `0 ops`, never a
+  bluffed number.
+- **Amend** — a real amendment POST against India (already amended to v2 in Prompt 21) came
+  back `DONE` with the live ledger showing `[retranslate] fr SKIPPED 0 ops`,
+  `[retranslate] pt SKIPPED 0 ops`, `[notice] IN SKIPPED 0 ops` — the idempotency guarantee
+  observed working end to end through the UI, not asserted from code reading alone. The
+  notice's `.md` link opened the real change notice (section 4 quoted before/after, the
+  24-hour deadline, the annexes-unchanged line) generated live in Prompt 20.
+
+**What the UI does not cover, logged rather than hidden:**
+1. **Integrity still reads a static snapshot**, `ui/public/integrity-report.json` (a copy of
+   `evidence/integrity-report.json`), not a live `GET /api/integrity` call — this was already
+   flagged as a known gap when Prompt 23 shipped and was not revisited here. Every other
+   screen is live.
+2. **No run-cancellation control.** The API has no "kill this run" endpoint and the UI has no
+   button for it; a started rollout/amendment runs to completion or failure server-side. This
+   is a real gap against the brief's B2 ("survives being stopped") if read as requiring an
+   in-flight cancel — what exists is idempotent *resume*, not *interrupt*: killing the whole
+   API process and restarting a run with the same countries will not double-charge or
+   double-generate (proven by the CLI's own "run it clean, then run it again" test in Phase
+   3), but there is no way to stop a run early from the UI once started.
+3. **The dev proxy is dev-only.** `vite.config.ts`'s `/api` proxy only exists under
+   `npm run dev`; a production `npm run build` + static host has no backend reachable at
+   `/api` unless something else (a reverse proxy, or serving both from one origin) is set up.
+   Not built — out of scope for a local demo.
+4. **No client-side tests.** All verification of these five screens was manual, live, in a
+   real browser against the real API and real `out/`/`state/` artifacts (documented above);
+   there is no React component test suite. The Python side (`tests/`, 51 tests) is unaffected
+   and unchanged by this phase.
+5. **No auth on the API.** Anyone who can reach port 8000 can trigger a rollout or amendment
+   (which spends real SuperDocs operations) or read `/exports`. Acceptable for a local demo
+   against a personal API key; not something to expose past localhost as built.
+6. **Amendment notice links are constructed client-side from a filename convention**
+   (`/exports/{code}/change-notice-v{from}-v{to}.md`), not returned by the API as an
+   already-formed URL the way pack exports are — because `amend.send_change_notice`'s result
+   still carries local filesystem `Path`s, not the `/exports`-relative form. Works because the
+   convention is fixed and was proven live, but it is a convention the client knows, not a
+   contract the API states.
