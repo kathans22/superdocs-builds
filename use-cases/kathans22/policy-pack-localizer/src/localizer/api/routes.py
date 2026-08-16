@@ -133,3 +133,16 @@ def start_amendment(request: AmendmentRequest, background_tasks: BackgroundTasks
     run = runs_module.create_run("amendment")
     background_tasks.add_task(runs_module.execute_amendment, run.run_id, request.countries)
     return run.to_summary()
+
+
+@router.get("/runs/{run_id}")
+def get_run_status(run_id: str) -> dict:
+    """Poll a run's status without blocking — a run still `running` is not
+    a failed run (CLAUDE.md: SuperDocs calls legitimately take 30s to
+    several minutes with no visible progress; that is processing, not a
+    crash). `result` is populated once `status` is `done`; `error` once
+    `status` is `error`."""
+    run = runs_module.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"No run {run_id!r}.")
+    return {**run.to_summary(), "result": run.result, "error": run.error}
