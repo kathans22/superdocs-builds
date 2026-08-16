@@ -46,7 +46,10 @@ def _generated_country_codes() -> list[str]:
 @router.get("/countries")
 def list_countries() -> list[dict]:
     """Every configured country — a data change (a new YAML file) is all it
-    takes for one to appear here, per CLAUDE.md rule 5."""
+    takes for one to appear here, per CLAUDE.md rule 5. `annex_summary` is
+    counted straight from that country's own YAML, not asserted, so two
+    countries with genuinely different annex content show genuinely
+    different numbers here."""
     countries = config_module.load_all_countries()
     return [
         {
@@ -55,6 +58,11 @@ def list_countries() -> list[dict]:
             "language": country["language"],
             "office": country["office"],
             "safeguarding_lead": country["safeguarding_lead"],
+            "annex_summary": {
+                "legal_instruments": len(country["legal"]),
+                "external_reporting_channels": len(country["reporting"]["external"]),
+                "escalation_tier_1": country["escalation"]["tier_1"],
+            },
         }
         for country in countries.values()
     ]

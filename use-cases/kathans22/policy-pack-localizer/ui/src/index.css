@@ -306,6 +306,60 @@ code {
   color: #fff;
 }
 
+/* ---- countries ---- */
+
+.country-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 24px;
+  padding: 18px 0;
+  border-top: 1px solid var(--border);
+}
+
+.country-id {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.country-name {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.country-office {
+  font-size: 13px;
+}
+
+.country-lang {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text);
+  align-self: center;
+}
+
+.country-annex {
+  font-size: 13px;
+  text-align: right;
+  line-height: 1.6;
+}
+
+.country-escalation {
+  color: var(--text-h);
+}
+
+@media (max-width: 640px) {
+  .country-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .country-annex {
+    text-align: left;
+  }
+}
+
 /* ---- loading / error ---- */
 
 .load-error {
