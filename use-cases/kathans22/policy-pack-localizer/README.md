@@ -164,6 +164,128 @@ Annex divergence, counted the same way: `reporting` 5/5 distinct, `legal` 5/5 di
 `escalation` 5/5 distinct — five countries producing five genuinely different annexes,
 not a name swapped into a shared paragraph.
 
+## The two ledgers — Run 1 (rollout) and Run 2 (amendment)
+
+Both tables below are the real, live-measured totals, not the idealised model. The
+idealised model (CLAUDE.md's worked example) prices a full 5-country rollout and a
+core amendment reaching all 5 offices at the same 7 operations each — the equivalence
+the build exists to demonstrate: **an update should cost like an update, not like a
+reissue.** The real runs cost more than 7 in both directions, for the same root cause
+in both directions: live SuperDocs `chat` edit calls do not reliably apply on the first
+attempt, and a failed attempt can still be billed. Every extra operation below is a
+retry recovering from that, not wasted or duplicate work — see
+[`evidence/ledger-summary.md`](evidence/ledger-summary.md) and
+[`evidence/run2-ledger.md`](evidence/run2-ledger.md) for the full detail.
+
+### Run 1 — initial rollout (idealised model, corrected economics per CLAUDE.md)
+
+The build's original design doc priced a pack at 1 operation (one batched call for all
+4 annex sections). Live testing (`evidence/superdocs-batch-limit-report.md`) proved that
+call is not reliable — a 4-section batch can report full success while changing nothing
+— so the design was corrected to 2 batches of 2 sections, and the idealised per-pack
+cost is **2 operations**, not 1:
+
+```
+[lock]      core v1 locked, 5 sections, hash aa3a7460          0 ops
+[translate] fr ← en                                            1 op
+[translate] pt ← en                                            1 op
+[pack]      IN  en  annexes 6-9, 2 batches of 2                2 ops
+[pack]      KE  en  annexes 6-9, 2 batches of 2                2 ops
+[pack]      FR  fr  annexes 6-9, 2 batches of 2                2 ops
+[pack]      SN  fr  annexes 6-9, 2 batches of 2                2 ops
+[pack]      BR  pt  annexes 6-9, 2 batches of 2                2 ops
+[ack]       5 acknowledgement forms                            0 ops
+[verify]    core identity ......................... PASS
+                                                        ───────
+                                               total    12 ops
+```
+
+**Real Run 1 cost more, and was not cleanly isolated to a single figure** — see
+`evidence/ledger-summary.md`. What was captured at full precision was the final
+remediation round (fixing leftover placeholder text and wrong-chunk edits across
+IN/KE/FR/SN/BR after the first annex pass):
+
+| step | ops |
+|---|---|
+| pack-fr — fix §6/§8/§9 leftover placeholder text | 1 |
+| pack-sn — fix §6/§7/§8 leftover placeholder text | 1 |
+| pack-br — fix §6 body + §9 (partial: 2 of 5 landed) | 1 |
+| pack-ke — dedupe §7, attempt 1 (did not land) | 1 |
+| pack-ke — dedupe §7, attempt 2 (landed, concurrent-merge notice) | 1 |
+| pack-br — heading-text fix via chat, natural language | 0 (not billable) |
+| pack-br — heading + §8 fix via chat, chunk-id reference | 0 (not billable) |
+| pack-br / pack-ke / svc-in-1 — verbatim `document_html` reload (final fix) | 0 (a document load, not an edit) |
+| **remediation round total** | **5** |
+
+The account's promo counter is the honest anchor for the true full Run 1 total: it
+dropped from 10,000 to 9,964 across the working session that produced all five clean
+packs — a 36-op spend, not all of which is cleanly attributable to this run alone (the
+account also carries earlier, unrelated experiment sessions). The 5-op remediation
+round above is what is stated with full confidence.
+
+### Run 2 — core amendment, v1 → v2 (section 4 only)
+
+Idealised model:
+
+```
+[diff]        core v1 → v2: section 4 changed, 1 of 5           0 ops
+[translate]   section 4 → fr                                    1 op
+[translate]   section 4 → pt                                    1 op
+[notice]      IN  en  1 section, 3 unchanged                    1 op
+[notice]      KE  en                                            1 op
+[notice]      FR  fr                                            1 op
+[notice]      SN  fr                                            1 op
+[notice]      BR  pt                                            1 op
+                                                        ───────
+                                                total     7 ops
+```
+
+Real ledger, live, `evidence/run2-ledger.md`:
+
+```
+[diff]        core v1 → v2: section 4 changed, 1 of 5           0 ops
+[retranslate] fr (section 4 only)                                1 op
+[retranslate] pt (section 4 only)                                1 op
+[notice]      IN  en  attempt 1 — billed, changes: null           1 op
+[notice]      IN  en  attempt 2 — landed                          1 op
+[notice]      SN  fr  attempt 1 — landed                          1 op
+[notice]      KE  en  attempt 1 — billed, changes: null           1 op
+[notice]      KE  en  attempt 2 — landed                          1 op
+[notice]      FR  fr  attempt 1 — landed                          1 op
+[notice]      BR  pt  attempt 1 — landed                          1 op
+                                                        ───────
+                                                total     9 ops
+```
+
+**9 operations, not 7.** Two of the five notices (IN, KE) needed a retry: attempt 1
+came back billed (`usage.was_billable: true, ops_charged: 1`) with a confused
+non-edit response and `changes: null`. `send_change_notice` never trusts the response
+text — it exports and checks the placeholder is actually gone before declaring
+success, and both retried cleanly on attempt 2. **Zero packs were reissued** — every
+notice was generated against the existing v1 packs on disk, re-verified afterward
+against the v1 lock, not the new v2 lock, because no pack changed.
+
+### The comparison that matters
+
+| | Run 1 — full rollout | Run 2 — core amendment |
+|---|---|---|
+| Scope | 5 countries, 3 languages, 5 packs produced | Same 5 countries, 3 languages, **0 packs reissued** |
+| Idealised operations | 2 translations + 5 packs × 2 = **12** | 2 re-translations + 5 notices × 1 = **7** |
+| Real operations | 36-op session total; 5 ops isolated at full precision (remediation round) | **9**, fully and cleanly isolated |
+| What ships | 5 full policy packs | 5 short (2–3 page) change notices |
+
+**A logged tension, not silently resolved:** an earlier version of this design priced a
+pack at 1 batched operation, making Run 1 and Run 2 both 7 ops — a clean symmetry. Live
+testing proved that 1-call batch unreliable and forced the correction above to 2 batches
+per pack, which breaks that symmetry (12 vs. 7). What the correction does *not* change is
+the actual point being demonstrated: a **notice** is a single-document call, not a
+multi-section annex batch, so its own idealised cost stayed at 1 operation regardless —
+the amendment path was never going to inherit the pack-batching cost, because it never
+batches. The real, honestly-itemised comparison is 12 real-adjacent ops to stand up the
+whole rollout once, versus **9 real ops to propagate one core change to all five offices
+with zero reissues** — an update that costs a fraction of standing the system up, which
+is the claim this build exists to prove.
+
 ## Credit
 
 Built by Kathan Shah (`kathans22`) for the SuperDocs Round 2 hiring task.
