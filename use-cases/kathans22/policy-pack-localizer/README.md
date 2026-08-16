@@ -299,6 +299,120 @@ mechanism that makes it true, and where to find the proof rather than the assert
 | Annexes genuinely country-specific | Every country's reporting channel, applicable law, and escalation tier is real, distinct data in its own YAML file — not a template with a swapped name — and divergence is counted by content hash after export, not claimed from a country label | `evidence/integrity-report.json`: `annex_divergence` — `reporting: 5 distinct`, `legal: 5 distinct`, `escalation: 5 distinct` |
 | Core amendment → per-country change notice, not a full reissue | Section-level diff (`amend.diff_core_versions`) isolates exactly which sections changed; only affected sections are re-translated, once per language; a short notice is generated per country; `service.verify_after_amendment` re-checks all five existing packs against the version they actually carry — no `generate_pack` call fires anywhere in the amendment path | `evidence/run2-ledger.md`: 9 ops, 5 notices generated, **zero packs reissued**; `service.verify_after_amendment` confirms all five packs still pass against v1 |
 
+## Decisions logged
+
+Seven fixed decisions, each made deliberately and each with its reasoning — logged here
+rather than left implicit, because a logged assumption counts in the build's favor.
+
+1. **Core identity is per-language, not per-document.** A translated core cannot be
+   byte-identical to its English source. Each language's core is derived exactly once
+   and hash-locked; every pack in that language carries the identical locked text. Two
+   French-speaking countries (France, Senegal) are in the demo set specifically to make
+   the equality visible across genuinely different annexes — a single-language demo set
+   could only prove this within one language, a much weaker claim.
+2. **The English core is authoritative.** Every pack states that its translation is
+   provided for working use, not certified legal equivalence. Claiming equivalence for a
+   machine translation is a claim nobody involved in this build is qualified to certify.
+3. **Protection is by verification, not by instruction.** Edit instructions name only
+   annex sections — core sections are never named in any instruction sent to SuperDocs.
+   But the guarantee that actually holds is the hash check after every export.
+   Instruction expresses intent; hashing enforces it. This distinction mattered in
+   practice: live testing repeatedly showed SuperDocs report success on a call that
+   changed nothing or changed the wrong chunk — trusting the instruction alone would
+   have shipped broken packs with a confident success message.
+4. **No sentinel markers in the document text.** The core/annex split lives entirely in
+   `config/manifest.yaml`. Markers in the shipped text would leak into every pack an
+   office actually reads, and would rely on the model respecting them rather than on a
+   mechanism outside the model's control.
+5. **Adding a country is a YAML file, not a code change.** `config/countries/*.yaml`
+   carries every country-specific fact — reporting contacts, legal citations, escalation
+   tiers, language. A sixth country costs one file. A sixth language costs one
+   translation operation and zero code.
+6. **The acknowledgement form is built deterministically, with zero SuperDocs
+   operations spent on it.** Filling known fields (office, country, pack version, the
+   locked core hash, safeguarding lead) into a known template has no ambiguity for a
+   model to resolve — spending an operation on it would be paying to do arithmetic
+   badly. SuperDocs is still used for upload and export, since both are free and produce
+   the actual styled `.docx` an office signs.
+7. **All organisations, offices, people, and contacts are invented** (Meridian Relief
+   Trust and its five field offices). The statutes and helplines cited in each country's
+   `legal`/`reporting` annex are real law and real public services — fabricating
+   legislation would have made the annex-divergence proof meaningless, since "genuinely
+   country-specific" has to mean specific to a real legal reality, not just distinct
+   fiction.
+
+## Limitations, honestly
+
+A flagged gap is worth more than a silent one here.
+
+**Where this build is thin:**
+
+- **The Integrity screen (UI) reads a static snapshot**
+  (`ui/public/integrity-report.json`), not a live `GET /api/integrity` call. Every other
+  screen (Countries, Generate, Packs, Amend) is live against the real API. This is a
+  known, not-yet-closed gap from when the Integrity screen was first built.
+- **No run-cancellation.** The API has no "stop this run" endpoint, and the UI has no
+  cancel button — a started rollout or amendment runs to completion or failure
+  server-side. What exists is idempotent *resume* (kill the whole process, restart with
+  the same countries, nothing is double-charged or double-generated — proven by the
+  CLI's clean-then-rerun test), not in-flight *interrupt*.
+- **No auth on the API.** Anyone who can reach port 8000 can trigger a rollout or
+  amendment, which spends real SuperDocs operations. Fine for a local demo against a
+  personal key; not something to expose past localhost as built.
+- **No client-side tests.** All five UI screens were verified manually, live, against
+  the real API and real `out/`/`state/` artifacts. The Python side (51 tests across
+  `tests/`) has no equivalent on the React side.
+- **The dev proxy is dev-only.** `vite.config.ts`'s `/api` proxy exists only under
+  `npm run dev`; a production build has no backend reachable at `/api` unless something
+  else fronts both origins. Not built — out of scope for a local demo.
+
+**What the normaliser gives up.** `corelock.normalise()` canonicalises Unicode form,
+line endings, quote style, dash-glyph family, space-character family, list-marker
+glyphs, and blank-line runs — but leaves case and actual wording, numbers, and word
+order untouched. This means a cosmetic round trip through SuperDocs' HTML export never
+registers as a false core change, which is the point — but it also means the hash check
+cannot distinguish "the model reformatted this sentence" from "nothing changed" if a
+reformatting happens to preserve every word and word order exactly. That case was never
+observed live in this build, but the normaliser's contract does not rule it out.
+
+**Translation quality cannot be independently verified by this system.** The core hash
+proves a translated core is *identical across every pack in that language* — it proves
+nothing about whether the translation is *correct*. On inspection, the French and
+Portuguese core translations read as accurate, idiomatic legal language, but "read as
+accurate" is a human judgment made once during this build, not an automated check. A
+related, observed-live limitation: independent translation calls for the same English
+clause can drift in wording even when the underlying English is unchanged — Brazil's v1
+core lock and v2 core lock render one unchanged clause as "idade de consentimento
+local" and "idade legal de consentimento local" respectively, a cosmetic difference from
+two separate live translation calls, not a substantive one. A change notice's
+plain-language summary is grounded in the literal displayed text, so a purely cosmetic
+re-translation difference could read to an office as if a rule changed when only its
+wording did. Not fixed in this build — would need clause-level diffing or an explicit
+instruction to the summary step to ignore wording-only deltas.
+
+**What would break at fifty countries.** The design's core claims should hold —
+core-per-language hashing and per-country YAML are both linear in the number of
+countries and languages, not quadratic, and nothing in the mechanism assumes five. What
+would not hold as-built:
+- **Manual remediation does not scale.** This build's real operation counts include
+  hand-observed defects (wrong-chunk edits, partial batches, a reverted concurrent
+  merge) that were caught and retried, in several cases requiring a fallback to a
+  verbatim `document_html` reload rather than a natural-language edit. The automated
+  retry/split logic (`_apply_annex_batch`) handles the *detected* failure modes; it does
+  not guarantee every future failure mode SuperDocs can produce is one of those.
+  At fifty countries, a defect class this build's retry logic doesn't yet cover would
+  need to be found and handled, not assumed away by volume.
+- **Sequential per-country processing.** `service.run` generates packs one country at a
+  time. Nothing in the design prevents parallelising across countries (each pack is an
+  independent SuperDocs session), but it is not built that way, so fifty countries would
+  take roughly ten times as long as five, wall-clock, not the same time.
+- **The operations budget.** At the real, itemised cost this build measured (well above
+  the idealised 2 ops/pack once remediation is included), fifty countries in ten
+  languages would consume a meaningfully larger slice of a fixed operations grant than
+  five countries in three did. The per-language caching (translate once, not once per
+  country) is what keeps this sub-linear in languages; it does nothing to reduce the
+  per-country pack-generation cost, which is where most of the real spend went.
+
 ## Credit
 
 Built by Kathan Shah (`kathans22`) for the SuperDocs Round 2 hiring task.
