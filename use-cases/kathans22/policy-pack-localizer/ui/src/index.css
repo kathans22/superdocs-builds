@@ -69,6 +69,42 @@ code {
   background: var(--code-bg);
 }
 
+/* ---- nav ---- */
+
+.app-nav {
+  border-bottom: 1px solid var(--border);
+}
+
+.app-nav-inner {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  gap: 24px;
+}
+
+.app-nav a {
+  display: inline-block;
+  padding: 16px 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--text);
+  border-bottom: 2px solid transparent;
+}
+
+.app-nav a:hover {
+  color: var(--text-h);
+}
+
+.app-nav a.active {
+  color: var(--text-h);
+  border-bottom-color: var(--accent);
+}
+
 /* ---- page shell ---- */
 
 .integrity {
