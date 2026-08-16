@@ -265,3 +265,39 @@ async def run(
 
     ledger.save()
     return {"results": results, "ledger": ledger}
+
+
+async def run_amendment(
+    country_codes: list[str],
+    *,
+    client_factory=SuperDocsClient,
+) -> dict:
+    """Propagate a core amendment to a set of countries: re-lock the core in
+    every language they use, send each country its own change notice, then
+    re-verify every pack against the version it was actually generated at
+    to confirm no pack was reissued. What the API's amendment run calls;
+    the CLI has no equivalent command yet, so this is the one place the
+    sequence lives.
+
+    Loads the persisted ledger so a resumed run does not double-count, and
+    saves it back at the end — the same discipline `run()` applies to a
+    rollout.
+    """
+    ledger = Ledger.load()
+    manifest = config_module.load_manifest()
+
+    relocked = await relock_v2(manifest=manifest, ledger=ledger, client_factory=client_factory)
+    diff = relocked["diff"]
+
+    notices = {}
+    for code in country_codes:
+        notices[code] = await amend_module.send_change_notice(
+            code, manifest, diff, ledger=ledger, client_factory=client_factory
+        )
+
+    verification = verify_after_amendment(
+        country_codes, manifest=manifest, from_version=diff["from_version"]
+    )
+
+    ledger.save()
+    return {"diff": diff, "notices": notices, "verification": verification, "ledger": ledger}

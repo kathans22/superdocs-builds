@@ -7,13 +7,24 @@ config, call service.py, and shape the response as JSON.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+from pydantic import BaseModel
 
 from .. import config as config_module
 from .. import packs
 from .. import service
+from . import runs as runs_module
 
 router = APIRouter()
+
+
+class RolloutRequest(BaseModel):
+    countries: list[str]
+    limit: int | None = None
+
+
+class AmendmentRequest(BaseModel):
+    countries: list[str]
 
 
 def _generated_country_codes() -> list[str]:
@@ -92,3 +103,33 @@ def integrity_report(countries: str | None = None) -> dict:
     if not codes:
         raise HTTPException(status_code=404, detail="No generated packs yet — run a rollout first.")
     return service.integrity_report(codes)
+
+
+def _reject_unknown_countries(codes: list[str]) -> None:
+    unknown = [code for code in codes if code not in config_module.load_all_countries()]
+    if unknown:
+        label = "country" if len(unknown) == 1 else "countries"
+        raise HTTPException(status_code=404, detail=f"Unknown {label}: {unknown!r}")
+
+
+@router.post("/runs/rollout", status_code=202)
+def start_rollout(request: RolloutRequest, background_tasks: BackgroundTasks) -> dict:
+    """Kick off core-lock + pack generation for the given countries in the
+    background and return immediately with a run id to poll — a rollout can
+    legitimately take minutes per country (CLAUDE.md: no aggressive
+    timeouts), so the request must not wait on it."""
+    _reject_unknown_countries(request.countries)
+    run = runs_module.create_run("rollout")
+    background_tasks.add_task(runs_module.execute_rollout, run.run_id, request.countries, request.limit)
+    return run.to_summary()
+
+
+@router.post("/runs/amendment", status_code=202)
+def start_amendment(request: AmendmentRequest, background_tasks: BackgroundTasks) -> dict:
+    """Kick off core re-lock + per-country change-notice generation in the
+    background and return immediately with a run id to poll. Zero packs are
+    reissued by this — see service.run_amendment."""
+    _reject_unknown_countries(request.countries)
+    run = runs_module.create_run("amendment")
+    background_tasks.add_task(runs_module.execute_amendment, run.run_id, request.countries)
+    return run.to_summary()
