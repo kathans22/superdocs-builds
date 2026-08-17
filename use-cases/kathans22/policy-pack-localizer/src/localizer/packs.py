@@ -30,6 +30,28 @@ class PackIntegrityError(RuntimeError):
     """
 
 
+class PackReissueError(RuntimeError):
+    """Raised when generate_pack is about to silently overwrite an
+    already-shipped pack from an older core_version with one from a newer
+    version.
+
+    No pack is ever reissued by a core amendment — offices get a change
+    notice instead (amend.send_change_notice); that guarantee is the whole
+    point of the amendment design. Nothing enforced it at the generation
+    boundary itself, though: an ordinary generate_pack() call made after an
+    amendment bumped manifest['core_version'] has its own, never-before-
+    charged content_key (pack:{code}:v{new_version}), so the existing
+    idempotency skip-check never even looks at what is already on disk —
+    it just proceeds to generate and ship over it. This is exactly what
+    happened live to Brazil and Kenya: their packs were regenerated
+    (chasing an unrelated export-duplication bug) after the core had
+    already moved to v2, silently replacing their genuine v1 packs with
+    v2-core ones. verify_after_amendment caught it after the fact, from
+    the exported hash; this guard catches it before a single SuperDocs
+    call is spent.
+    """
+
+
 _LANGUAGE_NAMES = {"en": "English", "fr": "French", "pt": "Portuguese"}
 
 
@@ -291,6 +313,60 @@ def _pack_files_exist(pack_dir: Path) -> bool:
     return all((pack_dir / filename).exists() for _, filename in _EXPORT_FILES)
 
 
+def _cached_pack_is_valid(pack_dir: Path, manifest: dict, language: str) -> bool:
+    """Whether the pack already on disk can be trusted as 'already done' for
+    idempotency, not just present.
+
+    A cached export that exists but is corrupted (e.g. a duplicated
+    SuperDocs export — see sections.parse_sections) must never be treated
+    as already-correct: that would let generate_pack's idempotency check
+    permanently protect a known-bad pack from ever being regenerated, since
+    "the ledger says charged and the file exists" would be true forever.
+    Idempotency means "don't re-buy a GOOD result" — it was never meant to
+    mean "trust whatever is on disk unconditionally."
+    """
+    markdown_filename = next(filename for fmt, filename in _EXPORT_FILES if fmt == "markdown")
+    try:
+        markdown_text = (pack_dir / markdown_filename).read_text(encoding="utf-8")
+        return verify_pack(markdown_text, manifest, language)["passed"]
+    except (OSError, ValueError):
+        return False
+
+
+def _shipped_pack_prior_version(
+    pack_dir: Path, manifest: dict, language: str, current_version: int
+) -> int | None:
+    """If `pack_dir` already holds a pack that cleanly verifies against some
+    OLDER, already-locked core_version (not `current_version`), return that
+    version number.
+
+    Returns None if there is nothing on disk yet (first-ever generation —
+    always safe), or if what is there does not cleanly verify against any
+    older lock either — genuine corruption, which is what the existing
+    idempotency check (_cached_pack_is_valid) already handles by
+    regenerating over it. Only a pack that is provably a GOOD, complete
+    pack for some other version is a reissue hazard worth blocking.
+    """
+    markdown_filename = next(filename for fmt, filename in _EXPORT_FILES if fmt == "markdown")
+    path = pack_dir / markdown_filename
+    if not path.exists():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for version in range(1, current_version):
+        if not corelock.lock_exists(version, language):
+            continue
+        pinned_manifest = {**manifest, "core_version": version}
+        try:
+            if verify_pack(text, pinned_manifest, language)["passed"]:
+                return version
+        except ValueError:
+            continue
+    return None
+
+
 _TEXT_EXPORT_FORMATS = {"markdown", "html", "txt"}
 _TEXT_EXPORT_KEYS = ("text", "markdown", "content")
 _EXPORT_FILES = (("markdown", "policy-pack.md"), ("docx", "policy-pack.docx"))
@@ -334,6 +410,7 @@ async def _write_export(
 
 
 _MAX_RETRY_DEPTH = 4
+_MAX_FINAL_EXPORT_ATTEMPTS = 2
 
 
 def _chunk(items: list, size: int) -> list[list]:
@@ -404,7 +481,17 @@ async def _apply_annex_batch(
     markdown_text = await _export_markdown_text(
         client, session_id, ledger, country_code, f"verify batch {section_numbers}"
     )
-    landed = _sections_landed(section_numbers, markdown_text, placeholders)
+    try:
+        landed = _sections_landed(section_numbers, markdown_text, placeholders)
+    except ValueError:
+        # sections.parse_sections already collapses a duplicated-but-
+        # identical export on its own, so reaching here means some
+        # section's duplicate copies genuinely conflict — a live SuperDocs
+        # export defect, not a "did this section land" question. Treat it
+        # as nothing in this batch landed and fall through to the same
+        # bisect/retry machinery a normal partial-apply failure uses,
+        # rather than crashing the whole pack.
+        landed = set()
     missing = [n for n in section_numbers if n not in landed]
 
     if not missing or depth >= _MAX_RETRY_DEPTH:
@@ -456,7 +543,7 @@ def _translated_core_sections(manifest: dict, language: str) -> list[dict]:
     return sections
 
 
-def _assemble_upload_document(manifest: dict, country: dict) -> str:
+def _assemble_upload_document(manifest: dict, country: dict, master_path: Path | None = None) -> str:
     """Build the document text to upload for one country's pack.
 
     A source-language country uploads policy-master.md unchanged, exactly as
@@ -466,9 +553,17 @@ def _assemble_upload_document(manifest: dict, country: dict) -> str:
     passed through a model here. Annex sections are left as the master's
     placeholders in both cases; annex localisation happens afterward via the
     batched chat edit, identically for every country regardless of language.
+
+    `master_path` defaults to the current policy-master.md — unchanged
+    behaviour. A caller may override it to reproduce a PRIOR core_version's
+    pack from its archived config/policy-master-v{n}.md (e.g. re-deriving a
+    pre-amendment pack after state/out was lost) — only meaningful for the
+    source language here, since a translated core never reads this file at
+    all, it reads its own locked 'sections' (see _translated_core_sections).
     """
+    master_path = master_path or POLICY_MASTER_PATH
     if country["language"] == manifest["source_language"]:
-        return POLICY_MASTER_PATH.read_text(encoding="utf-8")
+        return master_path.read_text(encoding="utf-8")
 
     master_sections = sections_module.parse_sections(POLICY_MASTER_PATH.read_text(encoding="utf-8"))
     master_body_by_number = {s["number"]: s["body"] for s in master_sections}
@@ -526,6 +621,8 @@ async def generate_pack(
     out_dir: Path = OUT_DIR,
     client_factory=SuperDocsClient,
     downloader=_default_downloader,
+    master_path: Path | None = None,
+    allow_reissue: bool = False,
 ) -> dict:
     """Generate one country's pack: upload, then the annex edit in batches.
 
@@ -537,6 +634,25 @@ async def generate_pack(
     SuperDocs does not reliably apply all four annex sections in a single
     call (see PROGRESS.md and evidence/superdocs-batch-limit-report.md), so
     CLAUDE.md's economics were corrected to match what actually happens.
+
+    `master_path` defaults to None (current policy-master.md) — unchanged
+    behaviour for the normal flow, where a pack is never reissued. It exists
+    only for a deliberate, explicit state-repair call: regenerating a
+    source-language pack against an archived prior core_version, passed
+    straight through to _assemble_upload_document. Pair it with a `manifest`
+    whose core_version matches that prior version, or the resulting pack
+    will be locked/labelled under the wrong version.
+
+    `allow_reissue` defaults to False: before doing any real work, this
+    checks whether `out_dir/country_code` already holds a pack that
+    cleanly verifies against some OLDER, already-locked core_version than
+    `manifest['core_version']` — a sign that generating now would silently
+    overwrite an already-shipped pack with new core content (PackReissueError,
+    see its docstring for the live incident this closes). A call made by
+    regenerate_pack_at_version's explicit repair path never trips this: it
+    always passes a `manifest` PINNED to the version being repaired, so
+    there is no "older" version left to guard against. Set True only for a
+    deliberate, one-off real reissue outside that repair path.
     """
     ledger = ledger if ledger is not None else Ledger()
     manifest = manifest if manifest is not None else config_module.load_manifest()
@@ -549,7 +665,11 @@ async def generate_pack(
     pack_dir = out_dir / country_code
     content_key = _content_key(country_code, manifest["core_version"])
 
-    if ledger.already_charged(content_key) and _pack_files_exist(pack_dir):
+    if (
+        ledger.already_charged(content_key)
+        and _pack_files_exist(pack_dir)
+        and _cached_pack_is_valid(pack_dir, manifest, country["language"])
+    ):
         ledger.record(
             "pack", country_code, chat_calls=0, wall_time=0.0,
             content_key=content_key, output_exists=True,
@@ -562,6 +682,26 @@ async def generate_pack(
             "skipped": True,
         }
 
+    if not allow_reissue:
+        prior_version = _shipped_pack_prior_version(
+            pack_dir, manifest, country["language"], manifest["core_version"]
+        )
+        if prior_version is not None:
+            raise PackReissueError(
+                f"{country_code} already has a pack on disk that verifies cleanly "
+                f"against core_version {prior_version}, but this call would generate "
+                f"one against core_version {manifest['core_version']} — silently "
+                f"reissuing it. No pack is ever reissued by a core amendment; an "
+                "amendment produces a change notice instead "
+                "(amend.send_change_notice/service.run_amendment). If this pack "
+                "genuinely needs replacing (state lost or corrupted), use the "
+                f"explicit repair path instead: service.regenerate_pack_at_version("
+                f"{country_code!r}, {prior_version}) or `python -m localizer "
+                f"repair-pack-version --countries {country_code} --version "
+                f"{prior_version}`. If a real reissue is truly intended, call "
+                "generate_pack(..., allow_reissue=True) explicitly."
+            )
+
     if country["language"] != manifest["source_language"]:
         # Cached by (core_version, language) inside derive_core itself: the
         # first country in a language pays the one translation operation,
@@ -571,7 +711,7 @@ async def generate_pack(
         )
 
     session_id = f"pack-{country_code.lower()}"
-    document_text = _assemble_upload_document(manifest, country)
+    document_text = _assemble_upload_document(manifest, country, master_path=master_path)
     _assert_core_verbatim(document_text, manifest, country["language"])
     file_base64 = base64.b64encode(document_text.encode("utf-8")).decode("ascii")
     instruction = build_instruction(manifest, country)  # full instruction, kept for the return value
@@ -585,8 +725,42 @@ async def generate_pack(
 
         # export_document, not the chat response, is the one export used for
         # everything downstream: verification, quarantine, and the shipped file.
+        # sections.parse_sections now silently collapses a duplicated-but-
+        # byte-identical export on its own (the common case: a flaky export
+        # repeats the whole already-correct document verbatim — observed
+        # live compounding with each further export on the same session, 9
+        # sections becoming 72 headings across 3 exports), so a ValueError
+        # here means every copy of some section's content genuinely
+        # disagrees — a real conflict, not mere repetition. Retrying more
+        # exports on an already-conflicted session is not reliable (the
+        # live Brazil trace above never cleared across 3 attempts, and each
+        # attempt costs nothing but is not guaranteed to help either), so
+        # this allows exactly one re-export to catch a transient race (e.g.
+        # a concurrent-merge notice settling) before quarantining rather
+        # than looping and hoping.
+        verification = None
+        for attempt in range(1, _MAX_FINAL_EXPORT_ATTEMPTS + 1):
+            try:
+                verification = verify_pack(markdown_text, manifest, country["language"])
+                break
+            except ValueError as exc:
+                if attempt == _MAX_FINAL_EXPORT_ATTEMPTS:
+                    quarantine_filename = next(fname for fmt, fname in _EXPORT_FILES if fmt == "markdown")
+                    quarantine_path = await _write_export(
+                        {"text": markdown_text},
+                        out_dir / "_quarantine" / country_code / quarantine_filename,
+                        "markdown",
+                    )
+                    raise PackIntegrityError(
+                        f"{country_code} pack export carried conflicting duplicate section "
+                        f"content on every one of {_MAX_FINAL_EXPORT_ATTEMPTS} attempts and "
+                        f"could not be safely verified: {exc}. Quarantined at {quarantine_path}."
+                    ) from exc
+                markdown_text = await _export_markdown_text(
+                    client, session_id, ledger, country_code, f"final retry {attempt}"
+                )
+
         markdown_export = {"text": markdown_text}
-        verification = verify_pack(markdown_text, manifest, country["language"])
         if not verification["passed"]:
             # Quarantined, not dropped: the failing export is preserved for
             # inspection at QUARANTINE_DIR, never at the real out/{code}/ path
