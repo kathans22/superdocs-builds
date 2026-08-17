@@ -5,3 +5,5 @@ __pycache__/
 node_modules/
 dist/
 *.egg-info/
+scripts/reset-demo.sh
+scripts/amend-demo.sh
