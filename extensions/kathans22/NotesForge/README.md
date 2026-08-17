@@ -71,3 +71,7 @@ src/
 ├── export.ts                    request_download_url → docx/pdf/html/md/txt
 └── handoff.ts                    agent handoff + takeover code
 ```
+
+##Video Link
+Visit [NotesForge Demo](https://youtu.be/cYoo76M_Y7Q)
+
