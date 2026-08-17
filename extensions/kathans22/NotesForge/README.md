@@ -72,6 +72,6 @@ src/
 └── handoff.ts                    agent handoff + takeover code
 ```
 
-##Video Link
+## Video Link
 Visit [NotesForge Demo](https://youtu.be/cYoo76M_Y7Q)
 
