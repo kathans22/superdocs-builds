@@ -1,6 +1,6 @@
 # NotesForge
 
-A zero-dependency Node 20+/TypeScript CLI agent that turns a folder of rough notes into a finished, exported report using the [SuperDocs](https://docs.superdocs.app) REST API.
+A zero-dependency Node 20+/TypeScript CLI agent that turns a folder of rough-notes into a finished, exported report using the [SuperDocs](https://docs.superdocs.app) REST API.
 
 ## Quickstart
 
