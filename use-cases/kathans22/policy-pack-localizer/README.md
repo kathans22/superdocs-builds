@@ -114,8 +114,11 @@ see Limitations). Five screens: Countries, Generate, Packs, Integrity, Amend.
 
 ### Demo
 
-- Video: `[demo link placeholder]`
-- Screenshot: `[screenshot placeholder — Integrity screen, the hero shot]`
+- Video: [SuperDocs Policy Pack Localizer demo](https://youtu.be/D2qND-vi6G8)
+
+- Screenshot — Integrity screen (hero shot):
+
+![Core Integrity screen — all packs pass, FR and SN share one core hash, annex slots diverge across five countries](evidence/integrity-screenshot.png)
 
 ## SuperDocs features used
 
