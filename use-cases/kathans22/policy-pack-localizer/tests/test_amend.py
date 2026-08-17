@@ -224,6 +224,49 @@ def test_diff_core_versions_finds_no_changes_between_a_version_and_itself(tmp_pa
     assert sorted(diff["unchanged_sections"]) == [1, 2, 3, 4, 5]
 
 
+def test_retranslate_self_heals_a_missing_v1_language_lock(tmp_path, monkeypatch):
+    # Reproduces the live bug: state/core-lock-v1-fr.json missing (a wiped
+    # or fresh state/ directory), which used to crash with a bare
+    # FileNotFoundError before retranslate_changed_sections ever got to its
+    # own job. A translated core is never deterministic, so — unlike the
+    # source-language self-heal — recovering it here means a genuine fresh
+    # translation of the archived v1 English master, costing one real
+    # operation, not a free re-hash.
+    manifest = _manifest()
+    monkeypatch.setattr(corelock, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(
+        amend, "archived_master_path", lambda version, m: amend.POLICY_MASTER_PATH
+    )
+
+    core_numbers = sorted(s["number"] for s in manifest["sections"] if s["role"] == "core")
+    v1_en_sections = [
+        {"number": n, "heading": f"Heading {n}", "body": f"English v1 body of section {n}."}
+        for n in core_numbers
+    ]
+    corelock.save_lock(corelock.lock(v1_en_sections, 1, "en"))
+    v2_en_sections = copy.deepcopy(v1_en_sections)
+    next(s for s in v2_en_sections if s["number"] == 4)["body"] = "English v2 body of section 4."
+    corelock.save_lock(corelock.lock(v2_en_sections, 2, "en"))
+
+    assert not corelock.lock_exists(1, "fr")
+    diff = amend.diff_core_versions(manifest, "en", 1, 2)
+    ledger = Ledger()
+    fake_client = _RetranslatingFakeClient()
+
+    result = asyncio.run(
+        amend.retranslate_changed_sections(
+            manifest, "fr", diff, ledger=ledger, client_factory=lambda: fake_client
+        )
+    )
+
+    assert corelock.lock_exists(1, "fr")  # self-healed, not still missing
+    assert result["core_version"] == 2
+    # One op to recover the lost v1 lock (a genuine translation), one op to
+    # translate the actually-changed section into v2 — two real operations,
+    # not a silently-assumed-free recovery.
+    assert ledger.total_operations == 2
+
+
 def test_format_diff_report_matches_the_required_wording(tmp_path, monkeypatch):
     manifest = _manifest()
     monkeypatch.setattr(corelock, "STATE_DIR", tmp_path)

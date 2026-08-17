@@ -18,20 +18,39 @@ from .ledger import Ledger, apply_limit
 from .mcp_client import SuperDocsClient
 
 
-def lock_core(manifest: dict | None = None, language: str | None = None) -> dict:
-    """Lock policy-master.md's core sections for one language. 0 ops — arithmetic."""
+def lock_core(
+    manifest: dict | None = None, language: str | None = None, version: int | None = None
+) -> dict:
+    """Lock the source-language master's core sections for one core_version.
+    0 ops — arithmetic, never a SuperDocs call.
+
+    `version` defaults to manifest['core_version'] (the current master at
+    config/policy-master.md) but may name any prior version instead, in
+    which case the text comes from the archived
+    config/policy-master-v{version}.md (amend.archived_master_path) rather
+    than the current file. This is only ever safe for the SOURCE language:
+    a prior English lock is a pure re-hash of static, git-committed text,
+    so re-deriving it always reproduces the exact same hash a first
+    derivation would have — there is nothing non-deterministic in the path.
+    It lets a lost state/core-lock-v{version}-{source_language}.json
+    self-heal (relock_v2 does this) without ever risking a different hash
+    than the one that would have been locked originally. It is NOT safe to
+    use this to re-derive a lost lock for a translated language — that
+    text only ever existed as a live SuperDocs translation, never as an
+    archived file, so it cannot be reproduced deterministically here.
+    """
     manifest = manifest if manifest is not None else config_module.load_manifest()
     language = language or manifest["source_language"]
+    version = version if version is not None else manifest["core_version"]
 
-    master_sections = sections_module.parse_sections(
-        packs.POLICY_MASTER_PATH.read_text(encoding="utf-8")
-    )
+    master_path = amend_module.archived_master_path(version, manifest)
+    master_sections = sections_module.parse_sections(master_path.read_text(encoding="utf-8"))
     sections_module.assert_matches_manifest(master_sections, manifest)
 
     core_numbers = {s["number"] for s in manifest["sections"] if s["role"] == "core"}
     core_sections = [s for s in master_sections if s["number"] in core_numbers]
 
-    lock_data = corelock.lock(core_sections, manifest["core_version"], language)
+    lock_data = corelock.lock(core_sections, version, language)
     corelock.save_lock(lock_data)
     return lock_data
 
@@ -64,6 +83,14 @@ async def relock_v2(
     from_version = to_version - 1
 
     lock_core(manifest=manifest)  # source language, 0 ops
+
+    if not corelock.lock_exists(from_version, source_language):
+        # state/ lost the pre-amendment source-language lock (e.g. a wiped
+        # or fresh state/ directory) — safe to self-heal: see lock_core's
+        # docstring for why this can never produce a different hash than
+        # whatever was originally locked. 0 ops; no SuperDocs call.
+        lock_core(manifest=manifest, version=from_version)
+
     diff = amend_module.diff_core_versions(manifest, source_language, from_version, to_version)
 
     countries = config_module.load_all_countries()
@@ -145,6 +172,67 @@ def verify_after_amendment(
         "core_v2_identity": core_v2_identity,
         "all_v2_identity_consistent": all_v2_identity_consistent,
     }
+
+
+async def regenerate_pack_at_version(
+    country_code: str,
+    version: int,
+    *,
+    ledger: Ledger,
+    manifest: dict | None = None,
+    out_dir: Path = packs.OUT_DIR,
+    client_factory=SuperDocsClient,
+    downloader=packs._default_downloader,
+) -> dict:
+    """Explicit state-repair path, never called by the normal rollout or
+    amendment flow: regenerate a country's pack against a prior core_version,
+    for when state/out was lost or corrupted and the currently-shipped pack
+    no longer represents that version (e.g. it holds the current, amended
+    core instead of the pre-amendment one verify_after_amendment expects, or
+    was generated from a translation that has since been re-derived).
+    Neither run() nor run_amendment() ever reissues a pack — that guarantee
+    is the whole point of the amendment design — so this exists only to
+    correct a pack that already, wrongly, was, not to make reissuing
+    routine.
+
+    Two cases, per _assemble_upload_document's own split:
+    - Source language: the core is a pure re-hash of archived, static text
+      (amend.archived_master_path), so this is always safe and free (0 ops)
+      to regenerate against — self-heals lock_core if needed.
+    - Every other language: the core is never read from a file at all — it
+      reads whatever is CURRENTLY locked for this language at `version`
+      (corelock.load_lock via _translated_core_sections), which must
+      already exist (from translate.derive_core or
+      amend.retranslate_changed_sections's self-heal). This function does
+      not derive one on your behalf: a translation is a real operation, and
+      silently spending one here would hide that cost from the caller.
+    """
+    manifest = manifest if manifest is not None else config_module.load_manifest()
+    country = config_module.load_country(config_module.COUNTRIES_DIR / f"{country_code}.yaml")
+    pinned_manifest = {**manifest, "core_version": version}
+
+    if country["language"] == manifest["source_language"]:
+        master_path = amend_module.archived_master_path(version, manifest)
+        lock_core(manifest=manifest, version=version)  # ensure the lock this pack verifies against exists; 0 ops
+    else:
+        master_path = None
+        if not corelock.lock_exists(version, country["language"]):
+            raise ValueError(
+                f"No v{version} lock exists yet for language {country['language']!r} — "
+                f"nothing to regenerate {country_code!r}'s pack against. Fix: run the "
+                "amendment (or translate.derive_core) for this language first."
+            )
+
+    return await packs.generate_pack(
+        country_code,
+        ledger=ledger,
+        manifest=pinned_manifest,
+        country=country,
+        out_dir=out_dir,
+        client_factory=client_factory,
+        downloader=downloader,
+        master_path=master_path,
+    )
 
 
 async def generate(

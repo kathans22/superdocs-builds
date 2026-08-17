@@ -3,6 +3,8 @@ each pack's actual exported core, not merely asserted from the lock."""
 
 from __future__ import annotations
 
+import asyncio
+
 from localizer import config as config_module
 from localizer import corelock
 from localizer import packs
@@ -121,3 +123,61 @@ def test_integrity_report_counts_one_distinct_when_annex_content_matches(tmp_pat
         "legal": "1 distinct",
         "escalation": "1 distinct",
     }
+
+
+def test_relock_v2_self_heals_a_missing_source_language_v1_lock(tmp_path, monkeypatch):
+    # Reproduces the live bug: state/core-lock-v1-en.json missing (a wiped
+    # or fresh state/ directory), which used to crash diff_core_versions
+    # with a bare FileNotFoundError before any operation was even attempted.
+    # A prior-version SOURCE-language lock is always safely re-derivable
+    # from the archived config/policy-master-v{version}.md — a pure re-hash
+    # of static, git-committed text — so relock_v2 must self-heal it rather
+    # than require it to have magically survived on disk.
+    manifest = config_module.load_manifest()
+    monkeypatch.setattr(corelock, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(
+        service.config_module,
+        "load_all_countries",
+        lambda: {
+            "IN": config_module.load_country(config_module.COUNTRIES_DIR / "IN.yaml"),
+            "KE": config_module.load_country(config_module.COUNTRIES_DIR / "KE.yaml"),
+        },
+    )
+    from_version, to_version = manifest["core_version"] - 1, manifest["core_version"]
+    assert not corelock.lock_exists(from_version, manifest["source_language"])
+
+    result = asyncio.run(service.relock_v2(manifest=manifest))
+
+    assert corelock.lock_exists(from_version, manifest["source_language"])
+    assert result["diff"]["from_version"] == from_version
+    assert result["diff"]["to_version"] == to_version
+    assert result["diff"]["changed_sections"] == [4]
+    # English-only country set in this test: nothing needed translating, so
+    # the self-heal (arithmetic) plus the v2 lock (also arithmetic for the
+    # source language) must together cost nothing.
+    assert result["locks"][manifest["source_language"]]["core_version"] == to_version
+
+
+def test_relock_v2_self_healed_v1_lock_matches_a_freshly_locked_v1(tmp_path, monkeypatch):
+    # The self-heal must reproduce the exact hash a direct v1 lock would —
+    # never a different one — since both hash the same archived, static text
+    # through the same pure lock() function. Computed in two independent
+    # state dirs so relock_v2 is genuinely forced through the self-heal
+    # path in the second, rather than finding an already-present v1 lock.
+    manifest = config_module.load_manifest()
+    from_version = manifest["core_version"] - 1
+
+    monkeypatch.setattr(corelock, "STATE_DIR", tmp_path / "state-direct")
+    direct = service.lock_core(manifest=manifest, version=from_version)
+
+    monkeypatch.setattr(corelock, "STATE_DIR", tmp_path / "state-healed")
+    monkeypatch.setattr(
+        service.config_module,
+        "load_all_countries",
+        lambda: {"IN": config_module.load_country(config_module.COUNTRIES_DIR / "IN.yaml")},
+    )
+    asyncio.run(service.relock_v2(manifest=manifest))
+    healed = corelock.load_lock(from_version, manifest["source_language"])
+
+    assert healed["core_hash"] == direct["core_hash"]
+    assert healed["section_hashes"] == direct["section_hashes"]

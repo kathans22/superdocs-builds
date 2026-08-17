@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import base64
 import time
+from pathlib import Path
 
 from . import config as config_module
 from . import corelock
@@ -83,6 +84,8 @@ async def derive_core(
     ledger: Ledger | None = None,
     manifest: dict | None = None,
     client_factory=SuperDocsClient,
+    version: int | None = None,
+    master_path: Path | None = None,
 ) -> dict:
     """Translate the core sections into `language`, hash them, and lock them.
 
@@ -96,6 +99,15 @@ async def derive_core(
     state/core-lock-v{version}-{lang}.json via the same corelock.lock()/
     save_lock() lock-time path the source language uses (service.lock_core)
     — one lock format, one place that produces it.
+
+    `version`/`master_path` default to manifest['core_version'] and the
+    current policy-master.md — unchanged behaviour. A caller may override
+    both to derive a PRIOR version's translation instead (amend.py's
+    retranslate_changed_sections does this to self-heal a lost pre-amendment
+    language lock, reading from the archived config/policy-master-v{n}.md).
+    Unlike the source language's lock, a translated core is never
+    deterministic — this genuinely re-translates and costs one operation,
+    the same as deriving it the first time would have.
     """
     ledger = ledger if ledger is not None else Ledger()
     manifest = manifest if manifest is not None else config_module.load_manifest()
@@ -107,7 +119,8 @@ async def derive_core(
             "derive_core is for every language other than the source."
         )
 
-    core_version = manifest["core_version"]
+    core_version = version if version is not None else manifest["core_version"]
+    master_path = master_path if master_path is not None else POLICY_MASTER_PATH
     content_key = _content_key(core_version, language)
 
     if ledger.already_charged(content_key) and corelock.lock_exists(core_version, language):
@@ -119,7 +132,7 @@ async def derive_core(
 
     instruction = _build_translation_instruction(manifest, language)
     session_id = f"translate-{language}"
-    file_base64 = base64.b64encode(POLICY_MASTER_PATH.read_bytes()).decode("ascii")
+    file_base64 = base64.b64encode(master_path.read_bytes()).decode("ascii")
 
     async with client_factory() as client:
         started = time.monotonic()

@@ -12,6 +12,7 @@ import httpx2
 from . import config as config_module
 from . import corelock
 from . import sections as sections_module
+from . import translate as translate_module
 from .ledger import Ledger, ops_from_response
 from .mcp_client import SuperDocsClient, SuperDocsClientError
 
@@ -331,6 +332,20 @@ async def retranslate_changed_sections(
 
     changed_numbers = diff["changed_sections"]
 
+    if not corelock.lock_exists(from_version, language):
+        # state/ lost this language's pre-amendment lock (e.g. a wiped or
+        # fresh state/ directory) — unlike the source language (a pure
+        # re-hash of archived text, see service.lock_core), a translated
+        # core was never archived as a file, so the only honest recovery is
+        # a genuine fresh translation of the archived v{from_version}
+        # English master. This costs one real operation, same as deriving
+        # it for the first time would have (CLAUDE.md: "translate core per
+        # language: 1 op") — never silently assumed free or skipped.
+        await translate_module.derive_core(
+            language, ledger=ledger, manifest=manifest, client_factory=client_factory,
+            version=from_version, master_path=archived_master_path(from_version, manifest),
+        )
+
     v1_lock = corelock.load_lock(from_version, language)
     v1_sections = v1_lock.get("sections")
     if not v1_sections:
@@ -394,7 +409,7 @@ def _format_notice_change_summary(diff: dict) -> str:
     return f"{header} Section{'s' if len(unchanged) != 1 else ''} {_join_numbers(unchanged)} unchanged."
 
 
-def _archived_master_path(version: int, manifest: dict) -> Path:
+def archived_master_path(version: int, manifest: dict) -> Path:
     """Path to the exact English master text for one core_version.
 
     config/policy-master.md always holds the CURRENT core_version — whatever
@@ -403,6 +418,11 @@ def _archived_master_path(version: int, manifest: dict) -> Path:
     (Prompt 18 archived v1 before amending section 4 to v2), so both the
     "before" and "after" text of any past amendment stay quotable verbatim,
     not just hash-locked.
+
+    Public (not `_`-prefixed) because service.lock_core also needs it, to
+    re-derive a lost source-language lock for a prior version deterministically
+    — the same archived text, hashed the same way, always reproduces the same
+    hash, so this is safe to call from outside this module.
     """
     if version == manifest["core_version"]:
         return POLICY_MASTER_PATH
@@ -421,14 +441,14 @@ def _core_sections_at(version: int, language: str, manifest: dict) -> dict[int, 
     in one language — the source for a change notice's quoted before/after.
 
     Source language reads straight from the archived/current master text
-    (_archived_master_path); every other language reads the verbatim
+    (archived_master_path); every other language reads the verbatim
     'sections' its lock already carries (translate.derive_core and
     retranslate_changed_sections persist this, never just hashes) — the
     same two-path split packs._assemble_upload_document already uses for
     assembling a pack's core.
     """
     if language == manifest["source_language"]:
-        text = _archived_master_path(version, manifest).read_text(encoding="utf-8")
+        text = archived_master_path(version, manifest).read_text(encoding="utf-8")
         parsed = sections_module.parse_sections(text)
         core_numbers = {s["number"] for s in manifest["sections"] if s["role"] == "core"}
         return {s["number"]: s for s in parsed if s["number"] in core_numbers}
