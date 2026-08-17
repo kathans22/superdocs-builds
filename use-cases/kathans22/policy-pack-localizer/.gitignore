@@ -7,3 +7,4 @@ dist/
 *.egg-info/
 scripts/reset-demo.sh
 scripts/amend-demo.sh
+DEMO-VIDEO-GUIDE.md
