@@ -74,7 +74,14 @@ def list_packs() -> list[dict]:
     """Every configured country, with whether its pack has actually been
     generated (files present in out/) — not just requested. A generated
     pack carries its own core_hash (recomputed from its export, same as
-    /packs/{code}) and links to its exported files under /exports."""
+    /packs/{code}) and links to its exported files under /exports.
+
+    A file existing in out/ does not guarantee it can be safely parsed —
+    sections.parse_sections rejects a document a SuperDocs export call
+    duplicated (see its docstring), which is a real, observed failure mode,
+    not hypothetical. That must surface as one bad row here, never as a
+    500 that hides every other country's genuinely fine pack behind it.
+    """
     countries = config_module.load_all_countries()
     manifest = config_module.load_manifest()
     generated = set(_generated_country_codes())
@@ -88,11 +95,14 @@ def list_packs() -> list[dict]:
             "generated": code in generated,
         }
         if code in generated:
-            verification = service.verify(code, manifest=manifest)
-            entry["core_hash"] = corelock.lock(
-                verification["exported_core_sections"], manifest["core_version"], country["language"]
-            )["core_hash"]
-            entry["exports"] = {fmt: f"/exports/{code}/{filename}" for fmt, filename in packs._EXPORT_FILES}
+            try:
+                verification = service.verify(code, manifest=manifest)
+                entry["core_hash"] = corelock.lock(
+                    verification["exported_core_sections"], manifest["core_version"], country["language"]
+                )["core_hash"]
+                entry["exports"] = {fmt: f"/exports/{code}/{filename}" for fmt, filename in packs._EXPORT_FILES}
+            except ValueError as exc:
+                entry["error"] = str(exc)
         entries.append(entry)
     return entries
 
@@ -113,7 +123,13 @@ def get_pack(code: str) -> dict:
         raise HTTPException(status_code=404, detail=f"No generated pack for {code!r} yet.")
 
     manifest = config_module.load_manifest()
-    verification = service.verify(code, manifest=manifest)
+    try:
+        verification = service.verify(code, manifest=manifest)
+    except ValueError as exc:
+        # The file exists but can't be safely parsed as one policy pack —
+        # e.g. a SuperDocs export call duplicated it (sections.parse_sections
+        # detects this). A named, actionable 422 beats an opaque 500.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     language = countries[code]["language"]
     core_hash = corelock.lock(
         verification["exported_core_sections"], manifest["core_version"], language
