@@ -1,4 +1,4 @@
-"""Thin wrapper over the SuperDocs MCP client â ported from Build 1.
+"""Thin wrapper over the SuperDocs MCP client Ã¢ÂÂ ported from Build 1.
 
 Connects over streamable HTTP with bearer auth. Named errors name the cause and the fix.
 """
@@ -31,7 +31,7 @@ _TRANSPORT_TIMEOUT = httpx2.Timeout(None)
 # operating limit. It must never be tight enough to cancel a working call.
 DEFAULT_CALL_TIMEOUT_SECONDS = 900.0
 
-# Transport-layer failures only â a connection that was never established or
+# Transport-layer failures only Ã¢ÂÂ a connection that was never established or
 # broke mid-flight. A slow-but-live response is never one of these, so it is
 # never retried; only a demonstrable transport failure is.
 _TRANSPORT_ERRORS = (
@@ -102,7 +102,7 @@ def _api_key() -> str:
     if key.strip() in {"", "your-key-here"}:
         raise SuperDocsClientError(
             "SUPERDOCS_API_KEY is still the placeholder. Fix: replace your-key-here "
-            "with a real sk_ key from use.superdocs.app â Settings â API Keys."
+            "with a real sk_ key from use.superdocs.app Ã¢ÂÂ Settings Ã¢ÂÂ API Keys."
         )
     return key
 
@@ -137,7 +137,7 @@ class SuperDocsClient:
             streamable_http_client(self._url, http_client=http_client)
         )
         # read_timeout_seconds=None: the session layer imposes no timeout of its
-        # own either â _call_tool's ceiling is the single enforced timeout.
+        # own either Ã¢ÂÂ _call_tool's ceiling is the single enforced timeout.
         session = await self._exit_stack.enter_async_context(
             ClientSession(read, write, read_timeout_seconds=None)
         )
@@ -170,7 +170,7 @@ class SuperDocsClient:
                 raise SuperDocsClientError(
                     f"SuperDocs tool '{name}' exceeded the {self._call_timeout:.0f}s ceiling "
                     f"after {elapsed:.0f}s. This is a safety net against a hung call, not a "
-                    "normal failure â SuperDocs calls legitimately run for minutes. Fix: check "
+                    "normal failure Ã¢ÂÂ SuperDocs calls legitimately run for minutes. Fix: check "
                     "the session/job state on SuperDocs before retrying; the original call may "
                     "still be running server-side, so do not blindly re-call."
                 ) from exc
@@ -376,7 +376,7 @@ def parse_proposed_changes(response) -> list[dict]:
 
     - Already-an-object: ``metadata.pending_changes`` (or ``pending_changes``, or
       ``document_changes.pending_changes``) is already a list of change dicts.
-      No parsing needed — this is the final result.
+      No parsing needed â this is the final result.
     - Double-encoded: an ``intermediate_responses`` entry with
       ``type == "proposed_change_batch"`` whose ``content`` field is a JSON-encoded
       STRING, not an object. It must be parsed once (a second parse relative to
@@ -384,7 +384,7 @@ def parse_proposed_changes(response) -> list[dict]:
       ``{"type", "batch_id", "batch_total", "changes": [...]}``. A bare JSON
       string or an already-parsed batch dict, passed directly, are also accepted.
 
-    Raises SuperDocsClientError — never returns None — when the payload is
+    Raises SuperDocsClientError â never returns None â when the payload is
     neither shape, or when a change is missing a required field, rather than
     handing back a change whose fields silently read as undefined.
     """
@@ -395,7 +395,7 @@ def parse_proposed_changes(response) -> list[dict]:
             raise SuperDocsClientError(
                 f"Proposed change {change.get('change_id', '<unknown>')!r} is missing "
                 f"required field(s) {missing}. Fix: this is not a valid SuperDocs "
-                "proposed-change payload  check the response was passed to "
+                "proposed-change payload Â check the response was passed to "
                 "parse_proposed_changes unmodified, not partially unwrapped first."
             )
     return changes
@@ -447,7 +447,7 @@ def _locate_changes(response) -> list[dict]:
     raise SuperDocsClientError(
         "No proposed changes found in this response. Fix: pass the response from a "
         "chat/get_job call made with approval_mode='ask_every_time' while the job is "
-        "awaiting_approval  look for metadata.pending_changes or an "
+        "awaiting_approval Â look for metadata.pending_changes or an "
         "intermediate_responses entry of type 'proposed_change_batch'."
     )
 
@@ -458,7 +458,7 @@ def _parse_json_string(text: str, context: str) -> dict:
     except json.JSONDecodeError as exc:
         raise SuperDocsClientError(
             f"Could not parse {context} as JSON: {exc}. Fix: this field is documented "
-            "as a JSON-encoded string  if SuperDocs changed that, this helper needs updating."
+            "as a JSON-encoded string Â if SuperDocs changed that, this helper needs updating."
         ) from exc
 
 
@@ -474,3 +474,61 @@ def _changes_from_batch(batch: dict) -> list[dict]:
             f"Proposed-change payload's 'changes' field is not a list: {type(changes).__name__}."
         )
     return changes
+
+
+def normalise_section_text(text: str) -> str:
+    """Collapse whitespace for stable pre/post comparison."""
+    return " ".join((text or "").split()).strip().lower()
+
+
+def landed_check(
+    pre_edit: dict[int, str],
+    post_edit: dict[int, str],
+    targeted: list[int],
+) -> dict[str, list[int]]:
+    """Compare each targeted section's post-edit text to its pre-edit text.
+
+    A targeted section *landed* only when post content exists and differs from pre
+    after normalisation. A success-shaped chat reply is not trusted on its own —
+    Build 1 observed "Successfully updated all 4 sections" while the document was
+    untouched.
+
+    Returns ``{"landed": [...], "failed": [...]}`` covering every targeted number.
+    """
+    landed: list[int] = []
+    failed: list[int] = []
+    for number in targeted:
+        pre = normalise_section_text(pre_edit.get(number, ""))
+        post = normalise_section_text(post_edit.get(number, ""))
+        if post and post != pre:
+            landed.append(number)
+        else:
+            failed.append(number)
+    return {"landed": landed, "failed": failed}
+
+
+def landed_check_from_proposed_changes(
+    pre_edit: dict[int, str],
+    changes: list[dict],
+    targeted: list[int],
+    section_of_change: dict[str, int],
+) -> dict[str, list[int]]:
+    """Landed-check using proposed-change old_html/new_html (requires section map).
+
+    A change counts as a landing signal for a section when ``new_html`` normalises
+    differently from both ``old_html`` and the pre-edit text for that section.
+    Prefer ``landed_check`` on an exported post-edit document when available.
+    """
+    changed_sections: set[int] = set()
+    for change in changes:
+        section = section_of_change.get(str(change.get("change_id")))
+        if section is None:
+            continue
+        old = normalise_section_text(change.get("old_html", ""))
+        new = normalise_section_text(change.get("new_html", ""))
+        pre = normalise_section_text(pre_edit.get(section, ""))
+        if new and new != old and new != pre:
+            changed_sections.add(section)
+    landed = [n for n in targeted if n in changed_sections]
+    failed = [n for n in targeted if n not in changed_sections]
+    return {"landed": landed, "failed": failed}
