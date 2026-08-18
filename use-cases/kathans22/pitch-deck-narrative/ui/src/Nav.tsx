@@ -4,6 +4,7 @@ import './Nav.css'
 const LINKS: { id: Screen; label: string }[] = [
   { id: 'divergence', label: 'Divergence' },
   { id: 'verticals', label: 'Verticals' },
+  { id: 'generate', label: 'Generate' },
 ]
 
 type Props = {
