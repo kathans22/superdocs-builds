@@ -238,6 +238,33 @@ Do **not** loosen thresholds to pass weak packs — fix YAML / narratives instea
 
 ---
 
+## Session 2 continued — Phase 7 / Prompt 21 (Remaining screens)
+
+- `f1ecbdb` feat(ui): verticals screen
+- `49313c0` feat(ui): generate screen with live ledger
+- `3039a5f` feat(ui): narratives screen with speaker notes and images
+- (this) docs: record Phase 7 UI coverage
+- Check: `npm run build` in `ui/` — **PASS**.
+
+---
+
+## Phase 7 — DONE
+
+**UI coverage** (`ui/` · `npm run dev`; FastAPI on `:8000` for live generate/ledger/docx):
+
+| Screen | Route | What it shows |
+|---|---|---|
+| Divergence | `#/divergence` | Pass/Fail, vertical vs shared means, pair×section grid |
+| Verticals | `#/verticals` | Knowledge-file summary: buyer, trigger, pain, objection, proof, terminology |
+| Generate | `#/generate` | Queue `POST /generate` (202 + poll); live `GET /ledger` (snapshot if API down) |
+| Narratives | `#/narratives` | Four exports; speaker notes; presenter visual on fintech §6; eligibility notes |
+
+Same paper/ink editorial language as Divergence. No chart library. Generate proxies `/api` → `127.0.0.1:8000`.
+
+**API (Prompt 19):** `GET /verticals` · `POST /generate` → 202 · `GET /runs/{id}` · `GET /narratives/{vertical}` · `GET /divergence` · `GET /ledger`.
+
+---
+
 ## Handoff for the next chat session
 
 **Branch:** `kathans22/pitch-deck-narrative` (pushed; work only under `use-cases/kathans22/pitch-deck-narrative/`).
