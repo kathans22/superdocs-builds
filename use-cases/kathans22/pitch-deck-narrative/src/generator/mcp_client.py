@@ -1,4 +1,4 @@
-"""Thin wrapper over the SuperDocs MCP client Ã¢ÂÂ ported from Build 1.
+"""Thin wrapper over the SuperDocs MCP client ÃÂ¢ÃÂÃÂ ported from Build 1.
 
 Connects over streamable HTTP with bearer auth. Named errors name the cause and the fix.
 """
@@ -31,7 +31,7 @@ _TRANSPORT_TIMEOUT = httpx2.Timeout(None)
 # operating limit. It must never be tight enough to cancel a working call.
 DEFAULT_CALL_TIMEOUT_SECONDS = 900.0
 
-# Transport-layer failures only Ã¢ÂÂ a connection that was never established or
+# Transport-layer failures only ÃÂ¢ÃÂÃÂ a connection that was never established or
 # broke mid-flight. A slow-but-live response is never one of these, so it is
 # never retried; only a demonstrable transport failure is.
 _TRANSPORT_ERRORS = (
@@ -102,7 +102,7 @@ def _api_key() -> str:
     if key.strip() in {"", "your-key-here"}:
         raise SuperDocsClientError(
             "SUPERDOCS_API_KEY is still the placeholder. Fix: replace your-key-here "
-            "with a real sk_ key from use.superdocs.app Ã¢ÂÂ Settings Ã¢ÂÂ API Keys."
+            "with a real sk_ key from use.superdocs.app ÃÂ¢ÃÂÃÂ Settings ÃÂ¢ÃÂÃÂ API Keys."
         )
     return key
 
@@ -137,7 +137,7 @@ class SuperDocsClient:
             streamable_http_client(self._url, http_client=http_client)
         )
         # read_timeout_seconds=None: the session layer imposes no timeout of its
-        # own either Ã¢ÂÂ _call_tool's ceiling is the single enforced timeout.
+        # own either ÃÂ¢ÃÂÃÂ _call_tool's ceiling is the single enforced timeout.
         session = await self._exit_stack.enter_async_context(
             ClientSession(read, write, read_timeout_seconds=None)
         )
@@ -170,7 +170,7 @@ class SuperDocsClient:
                 raise SuperDocsClientError(
                     f"SuperDocs tool '{name}' exceeded the {self._call_timeout:.0f}s ceiling "
                     f"after {elapsed:.0f}s. This is a safety net against a hung call, not a "
-                    "normal failure Ã¢ÂÂ SuperDocs calls legitimately run for minutes. Fix: check "
+                    "normal failure ÃÂ¢ÃÂÃÂ SuperDocs calls legitimately run for minutes. Fix: check "
                     "the session/job state on SuperDocs before retrying; the original call may "
                     "still be running server-side, so do not blindly re-call."
                 ) from exc
@@ -356,6 +356,95 @@ class SuperDocsClient:
             arguments["filename"] = filename
         return await self._call_tool("export_document", arguments)
 
+    async def chat_with_landed_check(
+        self,
+        message: str,
+        session_id: str,
+        section_numbers: list[int],
+        pre_edit: dict[int, str],
+        fetch_post_edit,
+        max_batch: int | None = None,
+        **chat_kwargs,
+    ) -> dict:
+        """Chat, verify each targeted section landed, split-retry failures alone.
+
+        ``fetch_post_edit`` is an async callable ``(session_id) -> dict[int, str]``
+        returning current section bodies (typically from a markdown/HTML export).
+
+        Flow:
+        1. Send the batch (respecting ``max_batch`` / ``SUPERDOCS_CHAT_BATCH_CAP``).
+        2. Landed-check against ``pre_edit``.
+        3. Log landed vs failed.
+        4. Retry each failed section alone (single-section calls).
+        5. Return a report — caller approves only after this returns.
+
+        A response that names sections and changes none is not a success.
+        """
+        if not section_numbers:
+            raise SuperDocsClientError(
+                "chat_with_landed_check requires section_numbers. Fix: pass the "
+                "slide-equivalent numbers this instruction is allowed to edit."
+            )
+
+        responses: list[dict] = []
+        still_failed: list[int] = []
+        all_landed: list[int] = []
+
+        # Initial pass — may auto-split by batch cap inside chat().
+        initial = await self.chat(
+            message,
+            session_id,
+            section_numbers=section_numbers,
+            max_batch=max_batch,
+            **chat_kwargs,
+        )
+        if isinstance(initial, list):
+            responses.extend(initial)
+        else:
+            responses.append(initial)
+
+        post_edit = await fetch_post_edit(session_id)
+        check = landed_check(pre_edit, post_edit, section_numbers)
+        logger.info(
+            "landed-check after batch %s: landed=%s failed=%s",
+            section_numbers,
+            check["landed"],
+            check["failed"],
+        )
+        all_landed.extend(check["landed"])
+        still_failed = list(check["failed"])
+
+        # Split-retry: each failed section alone.
+        for alone in split_retry_batches(still_failed):
+            retry_msg = (
+                f"{message}\n\n"
+                f"Only edit slide-equivalent section {alone[0]}. "
+                "Do not modify any other sections."
+            )
+            retry_response = await self._chat_once(
+                retry_msg, session_id, **chat_kwargs
+            )
+            responses.append(retry_response)
+            post_edit = await fetch_post_edit(session_id)
+            retry_check = landed_check(pre_edit, post_edit, alone)
+            logger.info(
+                "landed-check after split-retry %s: landed=%s failed=%s",
+                alone,
+                retry_check["landed"],
+                retry_check["failed"],
+            )
+            for n in retry_check["landed"]:
+                if n not in all_landed:
+                    all_landed.append(n)
+            still_failed = [n for n in still_failed if n not in retry_check["landed"]]
+
+        return {
+            "responses": responses,
+            "landed": sorted(all_landed),
+            "failed": sorted(still_failed),
+            "ready_to_approve": len(still_failed) == 0,
+        }
+
 
 def _first_text(content) -> str | None:
     for block in content or []:
@@ -376,7 +465,7 @@ def parse_proposed_changes(response) -> list[dict]:
 
     - Already-an-object: ``metadata.pending_changes`` (or ``pending_changes``, or
       ``document_changes.pending_changes``) is already a list of change dicts.
-      No parsing needed â this is the final result.
+      No parsing needed Ã¢ÂÂ this is the final result.
     - Double-encoded: an ``intermediate_responses`` entry with
       ``type == "proposed_change_batch"`` whose ``content`` field is a JSON-encoded
       STRING, not an object. It must be parsed once (a second parse relative to
@@ -384,7 +473,7 @@ def parse_proposed_changes(response) -> list[dict]:
       ``{"type", "batch_id", "batch_total", "changes": [...]}``. A bare JSON
       string or an already-parsed batch dict, passed directly, are also accepted.
 
-    Raises SuperDocsClientError â never returns None â when the payload is
+    Raises SuperDocsClientError Ã¢ÂÂ never returns None Ã¢ÂÂ when the payload is
     neither shape, or when a change is missing a required field, rather than
     handing back a change whose fields silently read as undefined.
     """
@@ -395,7 +484,7 @@ def parse_proposed_changes(response) -> list[dict]:
             raise SuperDocsClientError(
                 f"Proposed change {change.get('change_id', '<unknown>')!r} is missing "
                 f"required field(s) {missing}. Fix: this is not a valid SuperDocs "
-                "proposed-change payload Â check the response was passed to "
+                "proposed-change payload ÃÂ check the response was passed to "
                 "parse_proposed_changes unmodified, not partially unwrapped first."
             )
     return changes
@@ -447,7 +536,7 @@ def _locate_changes(response) -> list[dict]:
     raise SuperDocsClientError(
         "No proposed changes found in this response. Fix: pass the response from a "
         "chat/get_job call made with approval_mode='ask_every_time' while the job is "
-        "awaiting_approval Â look for metadata.pending_changes or an "
+        "awaiting_approval ÃÂ look for metadata.pending_changes or an "
         "intermediate_responses entry of type 'proposed_change_batch'."
     )
 
@@ -458,7 +547,7 @@ def _parse_json_string(text: str, context: str) -> dict:
     except json.JSONDecodeError as exc:
         raise SuperDocsClientError(
             f"Could not parse {context} as JSON: {exc}. Fix: this field is documented "
-            "as a JSON-encoded string Â if SuperDocs changed that, this helper needs updating."
+            "as a JSON-encoded string ÃÂ if SuperDocs changed that, this helper needs updating."
         ) from exc
 
 
@@ -489,7 +578,7 @@ def landed_check(
     """Compare each targeted section's post-edit text to its pre-edit text.
 
     A targeted section *landed* only when post content exists and differs from pre
-    after normalisation. A success-shaped chat reply is not trusted on its own —
+    after normalisation. A success-shaped chat reply is not trusted on its own â
     Build 1 observed "Successfully updated all 4 sections" while the document was
     untouched.
 
@@ -532,3 +621,8 @@ def landed_check_from_proposed_changes(
     landed = [n for n in targeted if n in changed_sections]
     failed = [n for n in targeted if n not in changed_sections]
     return {"landed": landed, "failed": failed}
+
+
+def split_retry_batches(failed_sections: list[int]) -> list[list[int]]:
+    """Failed sections retry alone — one section per chat call."""
+    return [[int(n)] for n in failed_sections]
