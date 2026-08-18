@@ -7,13 +7,12 @@ called again — the step is recorded SKIPPED and guard/score still run locally.
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from pathlib import Path
 from typing import Any
 
-from .divergence import evaluate_divergence, score_all
+from .divergence import write_divergence_report
 from .format_guard import assert_not_deck
 from .ledger import Ledger
 from .manifest import load_validated, project_root
@@ -101,10 +100,21 @@ def score_available(
     out_dir: Path | None = None,
     *,
     report_path: Path | None = None,
+    narratives_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Pairwise divergence over exports on disk. 0 ops. Needs ≥2 verticals."""
     bundle = load_validated()
-    narratives = discover_exported_narratives(out_dir)
+    if narratives_dir is not None:
+        narratives: dict[str, dict[int, str]] = {}
+        for path in sorted(Path(narratives_dir).glob("pitch-script-*-*.md")):
+            parts = path.stem.split("-")
+            if len(parts) < 4 or parts[0] != "pitch" or parts[1] != "script":
+                continue
+            bodies = parse_script_sections(path.read_text(encoding="utf-8"))
+            if bodies:
+                narratives[parts[2]] = bodies
+    else:
+        narratives = discover_exported_narratives(out_dir)
     weights = _section_weights(bundle["manifest"])
     dest = report_path or DIVERGENCE_REPORT_PATH
 
@@ -118,17 +128,12 @@ def score_available(
         logger.info("divergence scoring deferred: %s", result["reason"])
         return result
 
-    report = score_all(narratives, weights)
-    evaluation = evaluate_divergence(report, weights)
-    payload = {
-        "status": "scored",
-        "report": report,
-        "evaluation": evaluation,
-    }
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    payload["report_path"] = str(dest)
-    return payload
+    return write_divergence_report(
+        narratives,
+        weights,
+        dest=dest,
+        manifest_version=int((bundle["manifest"] or {}).get("manifest_version") or 1),
+    )
 
 
 async def run_vertical(

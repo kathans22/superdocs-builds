@@ -51,6 +51,17 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Ignore idempotent skip and regenerate even if exports exist.",
     )
+
+    score_parser = sub.add_parser(
+        "score",
+        help="Run divergence.score_all across exported narratives (0 SuperDocs ops).",
+    )
+    score_parser.add_argument(
+        "--from",
+        dest="narratives_from",
+        default="evidence/narratives",
+        help="Directory of pitch-script-*.md files (default: evidence/narratives).",
+    )
     return parser
 
 
@@ -73,6 +84,43 @@ async def _cmd_run(vertical: str, *, force: bool) -> int:
     return 0
 
 
+def _cmd_score(narratives_from: str) -> int:
+    from .service import EVIDENCE_DIR, score_available
+
+    source = Path(narratives_from)
+    if not source.is_absolute():
+        source = Path(__file__).resolve().parents[2] / source
+    result = score_available(
+        narratives_dir=source,
+        report_path=EVIDENCE_DIR / "divergence-report.json",
+    )
+    if result.get("status") == "deferred":
+        print(f"score_status=deferred")
+        print(f"score_reason={result.get('reason')}")
+        return 1
+    evaluation = result.get("evaluation") or {}
+    aggregates = (result.get("report") or {}).get("aggregates") or {}
+    print(f"verdict={result.get('verdict')}")
+    print(f"verticals={result.get('verticals')}")
+    print(f"mean_vertical_overlap={aggregates.get('mean_vertical_overlap')}")
+    print(f"mean_shared_overlap={aggregates.get('mean_shared_overlap')}")
+    print(f"passed={evaluation.get('passed')}")
+    for failure in evaluation.get("failures") or []:
+        print(f"failure={failure}")
+    for note in result.get("coverage_notes") or []:
+        print(
+            f"coverage={note['vertical']} section {note['section']}: {note['issue']}"
+        )
+    for cell in (result.get("highest_vertical_cells") or [])[:8]:
+        mark = " HOT" if cell.get("at_or_above_section_max") else ""
+        print(
+            f"vertical_cell section {cell['section']} "
+            f"{cell['vertical_a']}↔{cell['vertical_b']}: {cell['score']:.3f}{mark}"
+        )
+    print(f"score_report={result.get('report_path')}")
+    return 0 if evaluation.get("passed") else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     _load_dotenv()
     os.environ.setdefault("SUPERDOCS_CHAT_BATCH_CAP", "2")
@@ -89,6 +137,9 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
         return asyncio.run(_cmd_run(args.vertical, force=args.force))
+
+    if args.command == "score":
+        return _cmd_score(args.narratives_from)
 
     parser.error(f"unknown command {args.command!r}")
     return 2

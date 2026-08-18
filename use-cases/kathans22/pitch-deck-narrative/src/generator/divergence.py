@@ -38,8 +38,10 @@ to pass weak packs — fix the knowledge files / narratives instead.
 
 from __future__ import annotations
 
+import json
 import re
 from itertools import combinations
+from pathlib import Path
 from statistics import mean
 from typing import Any, Mapping
 
@@ -255,3 +257,105 @@ def evaluate_divergence(
             "shared_sections_gated": False,
         },
     }
+
+
+def coverage_notes(
+    narratives: Narratives,
+    expected_sections: list[SectionKey],
+) -> list[dict[str, Any]]:
+    """Flag verticals missing a section body (parser miss or unfilled heading)."""
+    notes: list[dict[str, Any]] = []
+    for vertical, sections in sorted(narratives.items()):
+        present = set(sections.keys()) | {str(k) for k in sections.keys()}
+        for section in expected_sections:
+            keys = {section, str(section)}
+            if isinstance(section, str) and section.isdigit():
+                keys.add(int(section))
+            body = ""
+            for key in keys:
+                if key in sections:
+                    body = sections[key] or ""
+                    break
+            if not str(body).strip():
+                notes.append(
+                    {
+                        "vertical": vertical,
+                        "section": str(section),
+                        "issue": "missing_or_empty_section_body",
+                        "detail": (
+                            "No parseable Slide-equivalent body for this section. "
+                            "Often caused by a nonstandard heading (not "
+                            "'## Slide-equivalent N — …'). Rework before trusting "
+                            "this cell's overlap score."
+                        ),
+                    }
+                )
+    return notes
+
+
+def highest_vertical_cells(
+    report: Mapping[str, Any],
+    section_weights: SectionWeights,
+    *,
+    limit: int = 15,
+) -> list[dict[str, Any]]:
+    """Largest vertical-tagged pair×section scores — never hide a hot cell in the mean."""
+    vertical_ids = {
+        str(section) for section, weight in section_weights.items() if weight == "vertical"
+    }
+    cells: list[dict[str, Any]] = []
+    for pair in report.get("pairs", []):
+        for section, score in pair.get("sections", {}).items():
+            if section not in vertical_ids:
+                continue
+            cells.append(
+                {
+                    "section": section,
+                    "vertical_a": pair["vertical_a"],
+                    "vertical_b": pair["vertical_b"],
+                    "score": score,
+                    "at_or_above_section_max": score >= VERTICAL_SECTION_MAX,
+                }
+            )
+    cells.sort(key=lambda c: c["score"], reverse=True)
+    return cells[:limit]
+
+
+def write_divergence_report(
+    narratives: Narratives,
+    section_weights: SectionWeights,
+    *,
+    dest: Path,
+    manifest_version: int | None = None,
+) -> dict[str, Any]:
+    """Run ``score_all`` + ``evaluate_divergence`` and write evidence JSON (0 ops)."""
+    if len(narratives) < 2:
+        raise ValueError("write_divergence_report requires at least two verticals")
+
+    report = score_all(narratives, section_weights)
+    evaluation = evaluate_divergence(report, section_weights)
+    expected = sorted(section_weights.keys(), key=lambda k: (str(type(k)), k))
+    notes = coverage_notes(narratives, expected)
+    top_vertical = highest_vertical_cells(report, section_weights)
+
+    payload: dict[str, Any] = {
+        "status": "scored",
+        "manifest_version": manifest_version,
+        "verticals": sorted(narratives.keys()),
+        "section_weights": {str(k): v for k, v in sorted(section_weights.items(), key=lambda kv: (str(type(kv[0])), kv[0]))},
+        "thresholds": {
+            "vertical_mean_max": VERTICAL_MEAN_MAX,
+            "vertical_section_max": VERTICAL_SECTION_MAX,
+            "shared_sections_gated": False,
+        },
+        "report": report,
+        "evaluation": evaluation,
+        "highest_vertical_cells": top_vertical,
+        "coverage_notes": notes,
+        "verdict": "PASS" if evaluation["passed"] else "FAIL",
+    }
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    payload["report_path"] = str(dest)
+    return payload
