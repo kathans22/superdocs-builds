@@ -140,8 +140,6 @@ Do **not** loosen thresholds to pass weak packs — fix YAML / narratives instea
 2. Format guard passes on the legal markdown + docx exports (structural — not a prose reminder).
 3. Idempotent re-run reports **SKIPPED** for the generate step; ops total unchanged.
 
-**Next:** Phase 4 — images on `image_eligible` sections; multi-vertical generate + live divergence report.
-
 ## Session 1 continued — Phase 4 / Prompt 13 (Fintech + healthcare)
 
 - `ac50c7a` feat(narrative): generate the fintech vertical narrative
@@ -156,12 +154,61 @@ Do **not** loosen thresholds to pass weak packs — fix YAML / narratives instea
 - `4fb2d71` feat(narrative): generate the edtech vertical narrative
 - `fd0e4e3` feat(divergence): run the full four-vertical scoring pass
 - `acd77a8` chore(evidence): commit the divergence report
-- docs commit: divergence results + rework notes
+- `1119de3` docs: record the divergence results and any section that needed rework
 - Four-vertical report: mean vertical **0.115** (&lt; 0.40), mean shared **0.186**, **PASS**, no hot vertical cells (≥ 0.55).
-- Rework: edtech section 7 heading drifted off `Slide-equivalent 7 — …` — unscored (0.0 cells); fix heading before trusting Objection for edtech pairs.
+- Rework noted: edtech section 7 heading drifted off `Slide-equivalent 7 — …` — unscored (0.0 cells).
 
 ## Session 1 continued — Phase 4 / Prompt 15 (Ledger total)
 
 - `a74b7d9` chore(evidence): commit the full four-vertical ledger
-- docs: reconcile actual ops vs CLAUDE.md (~20 estimated → **39** actual)
-- Cause: landed-check split-retries (and multi-billable calls per batch); not regenerations. Non-chat steps remain 0 ops.
+- `a248cbe` docs: reconcile actual ops against the estimated economics in CLAUDE.md
+- Actual charged total: **39 ops** (CLAUDE happy-path estimate was ~20). Cause: landed-check split-retries / multi-billable calls per batch. Non-chat steps = 0.
+
+---
+
+## Phase 4 — DONE
+
+**Checkpoint (Prompts 13–15):** three-plus verticals generated; divergence report shows vertical sections diverge and shared may overlap more; ledger reconciled.
+
+| Item | Status |
+|---|---|
+| Verticals on disk | legal, fintech, healthcare, edtech |
+| Exports (reviewable) | `evidence/narratives/pitch-script-*-claritydocs.{md,docx}` |
+| Divergence | `evidence/divergence-report.json` — **PASS** (mean vertical 0.115 &lt; 0.40; no cell ≥ 0.55) |
+| Human summary | `evidence/divergence-results.md` |
+| Ledger snapshot | `evidence/ledger-four-verticals.json` + report txt — **39 ops** |
+| Ops reconciliation | `evidence/ops-reconciliation.md` |
+
+**Next phase:** images on `image_eligible` sections (manifest: sections **6** and **8** only); ≥1 image per vertical in the demo. Stub: `src/generator/imagegen.py`. Billing note already filed: `docs/image-generation-billing.md` (image gen = normal chat ops, not a separate SKU).
+
+---
+
+## Handoff for the next chat session
+
+**Branch:** `kathans22/pitch-deck-narrative` (pushed; work only under `use-cases/kathans22/pitch-deck-narrative/`).
+
+**Do first every session:** read local `CLAUDE.md` (working agreement — **do not commit it**). Follow its fixed decisions, bug-evidence rule, and commit protocol. Update this `PROGRESS.md` at session end.
+
+**Do not use** `build2-sequential-prompts.md` numbering as source of truth — it does not match the live pasted-prompt sequence. Follow the prompt the user pastes + `CLAUDE.md` + this file.
+
+**CLI (already works):**
+```text
+python -m generator run --vertical <legal|fintech|healthcare|edtech>
+python -m generator score --from evidence/narratives
+```
+Idempotent: re-run of a finished vertical for the current manifest version → ledger `SKIPPED` (no regenerate).
+
+**API key:** not in this repo. Load from env or local `.env` (gitignored). Dev habit has been Build 1’s `.env` under `policy-pack-localizer` — never commit keys/emails.
+
+**Known defects to carry forward (do not rediscover):**
+1. **edtech §7** — export heading is not `## Slide-equivalent 7 — Objection Handling`; scorer treats Objection as empty for edtech pairs. Rework heading or regenerate that section before trusting Objection cells.
+2. **BUG-001 class** — leftover `PLACEHOLDER_*` lines under some filled sections (see `evidence/bugs/BUG-001-placeholder-leftovers.md`). Landed-check was tightened; quality still uneven on older legal export.
+3. **Ops budgeting** — plan **~8–12 ops/vertical** with retries on, not CLAUDE’s happy-path 5. Four verticals cost **39** this run.
+
+**Evidence already committed (prefer these over gitignored `out/` / `state/`):**
+- `evidence/narratives/` — four speaking scripts
+- `evidence/divergence-report.json` / `divergence-results.md`
+- `evidence/ledger-four-verticals.json` / `ops-reconciliation.md`
+- `evidence/bugs/` — SuperDocs surprises
+
+**Commit hygiene reminder:** `git add` specific paths only; never stage `.env`, keys, emails, `out/`, or `state/`; `evidence/` is fine; push `kathans22/pitch-deck-narrative`.
