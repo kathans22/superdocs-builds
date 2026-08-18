@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse, JSONResponse
 
+from generator.api.runs import RUNS
 from generator.service import (
     divergence_report,
     ledger_snapshot,
@@ -17,7 +18,7 @@ app = FastAPI(
     title="ClarityDocs pitch-script generator",
     description=(
         "Machine driver for speaking-script narratives. "
-        "Not a slide deck. Generation is SuperDocs-backed via service.py."
+        "Not a slide deck. POST /generate returns a run id immediately; poll GET /runs/{id}."
     ),
     version="0.1.0",
 )
@@ -33,14 +34,49 @@ def get_verticals() -> dict:
 
 
 @app.post("/generate")
-async def post_generate(
+def post_generate(
+    background_tasks: BackgroundTasks,
     vertical: str = Query(..., description="Vertical code, or 'all'."),
     force: bool = Query(False),
-) -> dict:
+) -> JSONResponse:
+    """Queue generation. Does not wait on SuperDocs — poll ``GET /runs/{run_id}``."""
+    known = list_verticals()["verticals"]
+    if vertical != "all" and vertical not in known:
+        raise HTTPException(
+            status_code=404,
+            detail=f"unknown vertical {vertical!r}; known: {known} (or 'all')",
+        )
+    run_id = RUNS.create(vertical, force)
+    background_tasks.add_task(_execute_run, run_id)
+    return JSONResponse(
+        status_code=202,
+        content={
+            "run_id": run_id,
+            "status": "queued",
+            "poll": f"/runs/{run_id}",
+            "vertical": vertical,
+        },
+    )
+
+
+async def _execute_run(run_id: str) -> None:
+    rec = RUNS.get(run_id)
+    if rec is None:
+        return
+    RUNS.mark(run_id, "running")
     try:
-        return await run_verticals(vertical, force=force)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        result = await run_verticals(rec["vertical"], force=bool(rec["force"]))
+        RUNS.mark(run_id, "done", result=result)
+    except Exception as exc:  # noqa: BLE001 — surface any generate failure on poll
+        RUNS.mark(run_id, "error", error=str(exc))
+
+
+@app.get("/runs/{run_id}")
+def get_run(run_id: str) -> dict:
+    rec = RUNS.get(run_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail=f"unknown run_id {run_id!r}")
+    return rec
 
 
 @app.get("/narratives/{vertical_code}")

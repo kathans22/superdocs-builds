@@ -217,6 +217,17 @@ Do **not** loosen thresholds to pass weak packs — fix YAML / narratives instea
 
 ---
 
+## Session 2 continued — Phase 7 / Prompt 19 (FastAPI routes)
+
+- `4b328e0` feat(api): expose verticals, generate, and narrative export
+- `dba1aeb` feat(api): expose divergence report and ledger
+- (this) feat(api): background run with polling for generation
+- Check: `tests/test_api.py` — **PASS** (mocked generate; no SuperDocs).
+- `POST /generate` returns **202** `{run_id}` immediately; poll `GET /runs/{run_id}`.
+- Serve: `uvicorn generator.api.app:app --reload` from this folder (after install).
+
+---
+
 ## Handoff for the next chat session
 
 **Branch:** `kathans22/pitch-deck-narrative` (pushed; work only under `use-cases/kathans22/pitch-deck-narrative/`).

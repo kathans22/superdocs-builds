@@ -25,15 +25,32 @@ def test_generate_unknown_vertical_is_404() -> None:
     assert response.status_code == 404
 
 
-def test_generate_calls_service(monkeypatch) -> None:
+def test_generate_returns_run_id_and_polls(monkeypatch) -> None:
     async def fake_run_verticals(vertical, **kwargs):
         return {"requested": vertical, "verticals": [vertical], "results": [], "ops_total": 0}
 
     monkeypatch.setattr(api_mod, "run_verticals", fake_run_verticals)
+    with TestClient(app) as client:
+        response = client.post("/generate", params={"vertical": "legal"})
+        assert response.status_code == 202
+        body = response.json()
+        assert body["status"] == "queued"
+        run_id = body["run_id"]
+        assert run_id
+        poll = client.get(f"/runs/{run_id}")
+        assert poll.status_code == 200
+        rec = poll.json()
+        assert rec["status"] in {"queued", "running", "done"}
+        # TestClient drains background tasks; the run should finish.
+        rec = client.get(f"/runs/{run_id}").json()
+        assert rec["status"] == "done"
+        assert rec["result"]["requested"] == "legal"
+
+
+def test_unknown_run_is_404() -> None:
     client = TestClient(app)
-    response = client.post("/generate", params={"vertical": "legal"})
-    assert response.status_code == 200
-    assert response.json()["requested"] == "legal"
+    response = client.get("/runs/not-a-real-run")
+    assert response.status_code == 404
 
 
 def test_fetch_narrative_export(tmp_path: Path, monkeypatch) -> None:
