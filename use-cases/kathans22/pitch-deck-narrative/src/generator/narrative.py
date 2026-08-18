@@ -16,6 +16,7 @@ from typing import Any
 
 import httpx2
 
+from .format_guard import FormatGuardError, assert_not_deck
 from .ledger import Ledger, ops_from_response, parse_ops_ceiling
 from .manifest import load_deck_manifest, load_product, load_validated, project_root
 from .mcp_client import (
@@ -175,6 +176,25 @@ async def _download_bytes(url: str) -> bytes:
         return response.content
 
 
+def _script_title(product_name: str) -> str:
+    return f"{product_name} — Pitch Speaking Script"
+
+
+def _guard_export_or_raise(
+    path: Path,
+    *,
+    title: str,
+    export_format: str,
+) -> None:
+    """Run format_guard; on failure remove the file so a bad export never lands."""
+    try:
+        assert_not_deck(path, title, export_format=export_format)
+    except FormatGuardError as exc:
+        if path.exists():
+            path.unlink()
+        raise FormatGuardError(f"export blocked — {exc}") from exc
+
+
 async def export_narrative_files(
     client: SuperDocsClient,
     session_id: str,
@@ -182,11 +202,16 @@ async def export_narrative_files(
     product_name: str = "ClarityDocs",
     out_dir: Path | None = None,
 ) -> dict[str, Path]:
-    """Export speaking script to markdown + docx under out/. Never a presentation path."""
+    """Export speaking script to markdown + docx under out/. Never a presentation path.
+
+    No export completes without passing format_guard.assert_not_deck. A guard
+    failure blocks the export and names which check failed.
+    """
     dest = out_dir or OUT_DIR
     dest.mkdir(parents=True, exist_ok=True)
     slug = product_name.lower().replace(" ", "")
     base = f"pitch-script-{vertical_code}-{slug}"
+    title = _script_title(product_name)
 
     md_export = await client.export(
         session_id=session_id,
@@ -201,6 +226,7 @@ async def export_narrative_files(
     )
     md_path = dest / f"{base}.md"
     md_path.write_text(markdown, encoding="utf-8")
+    _guard_export_or_raise(md_path, title=title, export_format="markdown")
 
     docx_export = await client.export(
         session_id=session_id,
@@ -215,6 +241,7 @@ async def export_narrative_files(
         )
     docx_path = dest / f"{base}.docx"
     docx_path.write_bytes(await _download_bytes(download_url))
+    _guard_export_or_raise(docx_path, title=title, export_format="docx")
     return {"markdown": md_path, "docx": docx_path}
 
 

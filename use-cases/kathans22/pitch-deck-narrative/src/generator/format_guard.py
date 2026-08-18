@@ -158,3 +158,75 @@ def assert_speaking_script_disclaimer(exported_path: str | Path) -> None:
             f"{SPEAKING_SCRIPT_DISCLAIMER!r}. Fix: ensure the skeleton notice "
             "survives fill+export; do not strip it in chat edits."
         )
+
+
+def assert_document_export_path(export_format: str | None) -> None:
+    """Defence in depth: only document export formats are allowed (never slides).
+
+    SuperDocs has no slide-producing surface in this build; this still rejects any
+    caller that tries to pass a presentation format through the export path.
+    """
+    fmt = _lower(export_format or "").strip()
+    if not fmt:
+        raise FormatGuardError(
+            "format_guard.export_path: export_format is missing. Fix: pass a "
+            "document format (markdown/docx/pdf/html/txt)."
+        )
+    if fmt in {"pptx", "ppt", "ppsx", "pps", "odp", "key", "presentation", "slides"}:
+        raise FormatGuardError(
+            f"format_guard.export_path: refused slide/presentation format {fmt!r}. "
+            "Fix: this build only exports speaking-script documents via "
+            "document export (markdown/docx)."
+        )
+    if fmt not in _ALLOWED_EXPORT_FORMATS:
+        raise FormatGuardError(
+            f"format_guard.export_path: unknown export format {fmt!r}. Fix: use one "
+            f"of {sorted(_ALLOWED_EXPORT_FORMATS)}."
+        )
+
+
+def extract_document_title(exported_path: str | Path, fallback: str = "") -> str:
+    """Best-effort title from markdown H1 or the provided fallback."""
+    path = Path(exported_path)
+    if path.suffix.lower() in {".md", ".markdown", ".html", ".htm", ".txt"}:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("# "):
+                return stripped.lstrip("#").strip()
+            if stripped.lower().startswith("<h1"):
+                return re.sub(r"<[^>]+>", "", stripped).strip()
+    return fallback
+
+
+def assert_not_deck(
+    exported_path: str | Path,
+    title: str,
+    *,
+    export_format: str | None = None,
+) -> None:
+    """Block any export that looks like a slide deck.
+
+    Runs structural checks in order and names the failed check in FormatGuardError:
+      1. format_guard.export_path
+      2. format_guard.filename
+      3. format_guard.title
+      4. format_guard.disclaimer
+    """
+    path = Path(exported_path)
+    # Infer format from path when caller omits it (still validates extension).
+    inferred = export_format
+    if inferred is None:
+        suffix = path.suffix.lower().lstrip(".")
+        if suffix == "markdown":
+            inferred = "markdown"
+        elif suffix == "md":
+            inferred = "markdown"
+        else:
+            inferred = suffix or None
+
+    assert_document_export_path(inferred)
+    assert_filename_not_deck(path)
+    resolved_title = (title or "").strip() or extract_document_title(path)
+    assert_title_not_deck(resolved_title)
+    assert_speaking_script_disclaimer(path)
