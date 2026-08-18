@@ -1,6 +1,39 @@
 """Pairwise lexical-overlap scoring for narrative section texts.
 
 Measurement first, generation second — zero SuperDocs operations. Arithmetic only.
+This module is Build 2's counterpart to Build 1's core-hash: a number a reviewer can
+check instead of a substance claim they have to take on trust.
+
+------------------------------------------------------------------------------
+Divergence thresholds — what \"low enough\" means
+------------------------------------------------------------------------------
+
+Metric: word-level Jaccard on normalised tokens (see ``score_pair``).
+
+**Vertical-tagged sections** (Problem, Why Now, Solution Fit, Proof, Objection, ROI)
+must differ in substance. Empirically, on hand-made fixtures in this repo:
+
+- A genuine legal-vs-fintech objection pair scores ~0.03.
+- The same objection with industry nouns swapped scores ~0.70.
+- Identical shared Opening copy scores 1.0 (expected — product is held constant).
+
+So:
+
+- ``VERTICAL_MEAN_MAX = 0.40`` — mean Jaccard across all pair×vertical-section cells
+  must stay **below 0.40**. That sits between the genuine band (~0.05–0.25 with some
+  shared product vocabulary like \"ClarityDocs\" / \"approve\") and the template-and-swap
+  band (~0.60+). Below 0.40 is \"low enough\" for this build.
+- ``VERTICAL_SECTION_MAX = 0.55`` — **any single** vertical-tagged section pair at or
+  above 0.55 is a template-and-swap failure even if other sections pull the mean down.
+  Objection and Proof are where swaps hide; one hot section is enough to fail.
+
+**Shared-tagged sections** (Opening, Product Overview, Call to Action) may score
+higher — the product is constant by design. They are reported for visibility but do
+**not** fail the run on high overlap.
+
+**Template-and-swap failure** = ``mean_vertical_overlap >= VERTICAL_MEAN_MAX`` OR any
+vertical-tagged section pair ``>= VERTICAL_SECTION_MAX``. Do not loosen these numbers
+to pass weak packs — fix the knowledge files / narratives instead.
 """
 
 from __future__ import annotations
@@ -15,6 +48,10 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+(?:'[a-z0-9]+)?")
 SectionKey = int | str
 Narratives = Mapping[str, Mapping[SectionKey, str]]
 SectionWeights = Mapping[SectionKey, str]
+
+# See module docstring for justification. Do not raise these to make weak packs pass.
+VERTICAL_MEAN_MAX = 0.40
+VERTICAL_SECTION_MAX = 0.55
 
 
 def normalize_tokens(text: str) -> frozenset[str]:
@@ -53,6 +90,20 @@ def _section_keys(narratives: Narratives) -> list[SectionKey]:
     for sections in narratives.values():
         keys.update(sections.keys())
     return sorted(keys, key=lambda k: (str(type(k)), k))
+
+
+def _weight_for(section: SectionKey, section_weights: SectionWeights) -> str | None:
+    if section in section_weights:
+        return section_weights[section]
+    if isinstance(section, str) and section.isdigit():
+        as_int = int(section)
+        if as_int in section_weights:
+            return section_weights[as_int]
+    if not isinstance(section, str):
+        as_str = str(section)
+        if as_str in section_weights:
+            return section_weights[as_str]  # type: ignore[index]
+    return None
 
 
 def score_all(
@@ -101,11 +152,7 @@ def score_all(
             score = score_pair(text_a, text_b)
             section_scores[str(section)] = score
 
-            weight = section_weights.get(section)
-            if weight is None:
-                # try int/str coercion for manifest numbers loaded as int
-                alt = int(section) if isinstance(section, str) and section.isdigit() else str(section)
-                weight = section_weights.get(alt)  # type: ignore[arg-type]
+            weight = _weight_for(section, section_weights)
             if weight == "vertical":
                 vertical_scores.append(score)
                 pair_vertical.append(score)
@@ -145,4 +192,66 @@ def score_all(
             "shared_cells": len(shared_scores),
         },
         "per_pair_aggregates": per_pair_aggregates,
+        "thresholds": {
+            "vertical_mean_max": VERTICAL_MEAN_MAX,
+            "vertical_section_max": VERTICAL_SECTION_MAX,
+            "shared_sections_gated": False,
+        },
+    }
+
+
+def evaluate_divergence(
+    report: Mapping[str, Any],
+    section_weights: SectionWeights,
+) -> dict[str, Any]:
+    """Apply the documented thresholds to a ``score_all`` report.
+
+    Passes only when mean vertical overlap is below ``VERTICAL_MEAN_MAX`` and every
+    vertical-tagged section pair is below ``VERTICAL_SECTION_MAX``. Shared overlap
+    is recorded but never fails the gate.
+    """
+    mean_vertical = report.get("aggregates", {}).get("mean_vertical_overlap")
+    failures: list[str] = []
+
+    if mean_vertical is None:
+        failures.append("no vertical-tagged section scores present")
+    elif mean_vertical >= VERTICAL_MEAN_MAX:
+        failures.append(
+            f"mean_vertical_overlap {mean_vertical:.3f} >= {VERTICAL_MEAN_MAX} "
+            f"(template-and-swap / weak substance)"
+        )
+
+    vertical_section_ids = {
+        str(section) for section, weight in section_weights.items() if weight == "vertical"
+    }
+
+    hot_sections: list[dict[str, Any]] = []
+    for pair in report.get("pairs", []):
+        for section, score in pair.get("sections", {}).items():
+            if section not in vertical_section_ids:
+                continue
+            if score >= VERTICAL_SECTION_MAX:
+                hot = {
+                    "vertical_a": pair["vertical_a"],
+                    "vertical_b": pair["vertical_b"],
+                    "section": section,
+                    "score": score,
+                }
+                hot_sections.append(hot)
+                failures.append(
+                    f"section {section} {pair['vertical_a']}↔{pair['vertical_b']} "
+                    f"overlap {score:.3f} >= {VERTICAL_SECTION_MAX}"
+                )
+
+    return {
+        "passed": not failures,
+        "failures": failures,
+        "hot_sections": hot_sections,
+        "mean_vertical_overlap": mean_vertical,
+        "mean_shared_overlap": report.get("aggregates", {}).get("mean_shared_overlap"),
+        "thresholds": {
+            "vertical_mean_max": VERTICAL_MEAN_MAX,
+            "vertical_section_max": VERTICAL_SECTION_MAX,
+            "shared_sections_gated": False,
+        },
     }
