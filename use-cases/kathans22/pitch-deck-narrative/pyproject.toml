@@ -23,5 +23,6 @@ dev = ["pytest"]
 where = ["src"]
 
 [tool.pytest.ini_options]
+pytestasyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]
