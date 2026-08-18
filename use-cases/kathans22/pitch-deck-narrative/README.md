@@ -6,22 +6,51 @@ Each vertical gets a nine-section script: heading, talking point, full speaker n
 
 Built **on** SuperDocs (MCP): upload → batched chat fill → approve → export. Divergence between verticals is **measured** (lexical overlap), not asserted.
 
-## Setup
+## One command (API + UI)
+
+From this folder (`use-cases/kathans22/pitch-deck-narrative`):
 
 ```text
-# From this folder (use-cases/kathans22/pitch-deck-narrative)
+cp .env.example .env
+# Edit .env once: set SUPERDOCS_API_KEY=sk_… (never commit .env)
+
+docker compose up --build
+```
+
+Then open:
+
+| Surface | URL |
+|---|---|
+| UI (Divergence / Verticals / Generate / Narratives) | http://localhost:8080 |
+| API | http://localhost:8000/verticals |
+
+That is the documented path. No separate `npm install`, `pip install`, or Vite proxy step for the demo stack.
+
+If startup fails, the container prints **ERROR / Cause / Fix** (missing `.env`, placeholder key, or missing `config/`). Compose also refuses to start when `.env` is absent (`env_file` required).
+
+Stop with `Ctrl+C` or `docker compose down`.
+
+**Clean-clone corrections applied for this prompt:** `httpx2` is listed in `pyproject.toml` (the MCP client imports it; `httpx` alone is not enough). `OPS_BUDGET_CAP` default in `.env.example` is **200** so a compose run is not blocked by the existing 39-op ledger. Demo ports are **8080** (UI) and **8000** (API), not Vite’s 5173.
+
+## Local CLI (optional, no Docker)
+
+```text
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 # Unix:    source .venv/bin/activate
 pip install -e .
 
 cp .env.example .env
-# Put a real SuperDocs API key in .env (never commit .env)
+# Set SUPERDOCS_API_KEY=sk_… in .env
+
+python -m generator run --vertical legal
+python -m generator score --from evidence/narratives
+uvicorn generator.api.app:app --reload
 ```
 
-Requires Python 3.12+. Optional UI: Node 20+ in `ui/`.
+Requires Python 3.12+. UI without Docker: `cd ui && npm install && npm run dev` (proxies `/api` to `:8000`).
 
-## Run
+## Run (CLI details)
 
 ```text
 # Generate one vertical (idempotent for the current manifest version)
@@ -35,14 +64,6 @@ python -m generator run --vertical legal --force
 
 # Score divergence across on-disk scripts (0 SuperDocs ops)
 python -m generator score --from evidence/narratives
-
-# API (non-blocking generate)
-uvicorn generator.api.app:app --reload
-# POST /generate?vertical=legal → 202 {run_id}; poll GET /runs/{run_id}
-
-# Divergence UI
-cd ui && npm install && npm run dev
-# Optional: keep API on :8000 so Generate / Narratives can proxy /api
 ```
 
 Exports land under `out/` (gitignored). Reviewable copies for this build live in `evidence/narratives/`.

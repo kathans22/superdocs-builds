@@ -12,6 +12,7 @@ dependencies = [
   "uvicorn",
   "pyyaml",
   "httpx",
+  "httpx2",
   "mcp",
   "pytest",
 ]
