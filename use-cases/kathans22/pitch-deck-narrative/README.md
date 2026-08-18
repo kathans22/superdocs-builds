@@ -1,5 +1,7 @@
 # ClarityDocs pitch-script narrative generator
 
+**Folder:** `use-cases/kathans22/pitch-deck-narrative/` (Build 2 for the SuperDocs hiring round). Work stays inside this folder only — see the repo [CONTRIBUTING.md](../../../CONTRIBUTING.md).
+
 A SuperDocs-backed generator that writes **vertical-specific sales speaking scripts** for one invented product — **ClarityDocs**, a document-AI assistant — across legal, fintech, healthcare, and edtech.
 
 Each vertical gets a nine-section script: heading, talking point, full speaker notes, and an optional presenter visual. The deliverable is a **speaking script document** (markdown / DOCX). It is **not** a slide deck and is not meant to look like one.
@@ -70,7 +72,9 @@ Exports land under `out/` (gitignored). Reviewable copies for this build live in
 
 ## Demo / screenshots
 
-Place demo captures here when recording the ship walkthrough (filenames are placeholders until screenshots exist):
+**Runnable demo (local):** after `docker compose up --build`, open http://localhost:8080 (UI) and http://localhost:8000/verticals (API). No separate hosted deployment URL for this build.
+
+Screenshot placeholders for a walkthrough recording:
 
 | Asset | Intended capture |
 |---|---|
@@ -78,7 +82,7 @@ Place demo captures here when recording the ship walkthrough (filenames are plac
 | `docs/demo/narratives-fintech.png` | Narratives screen: fintech speaker notes + presenter visual |
 | `docs/demo/speaking-script-excerpt.png` | Markdown/DOCX export showing the “Speaking script — not a slide deck” line |
 
-Until those files exist, open `ui/` (`npm run dev`) and the scripts under `evidence/narratives/`.
+Until those files exist, use the compose UI and the scripts under `evidence/narratives/`.
 
 ## Credit
 
@@ -185,4 +189,4 @@ Bug evidence written during this build (submission-form rollup). Full write-ups 
 
 ## License
 
-MIT
+MIT — see [`LICENSE`](LICENSE). Compatible with the parent [superdocs-builds](https://github.com/superdocsapp/superdocs-builds) MIT license ([CONTRIBUTING.md](../../../CONTRIBUTING.md)). Secrets stay out of the tree (`.env.example` uses placeholders only).
