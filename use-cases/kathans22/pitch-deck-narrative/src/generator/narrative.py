@@ -10,9 +10,12 @@ import html
 import logging
 import re
 import uuid
+from pathlib import Path
 from typing import Any
 
-from .manifest import load_deck_manifest, load_product, load_validated
+import httpx2
+
+from .manifest import load_deck_manifest, load_product, load_validated, project_root
 from .mcp_client import (
     SuperDocsClient,
     SuperDocsClientError,
@@ -23,16 +26,14 @@ from .mcp_client import (
 
 logger = logging.getLogger(__name__)
 
+OUT_DIR = project_root() / "out"
+
 
 def build_skeleton_html(
     manifest: dict[str, Any] | None = None,
     product: dict[str, Any] | None = None,
 ) -> str:
-    """Build an empty nine-section speaking-script skeleton from the deck manifest.
-
-    Headings only — bodies are placeholders filled later from vertical knowledge.
-    Title and first line state plainly this is a speaking script, not a slide deck.
-    """
+    """Build an empty nine-section speaking-script skeleton from the deck manifest."""
     manifest = manifest or load_deck_manifest()
     product_doc = product or load_product()
     product_block = product_doc.get("product") or product_doc
@@ -93,6 +94,7 @@ def build_batch_instruction(
     capabilities = product_block.get("capabilities") or []
     differentiator = _text(product_block.get("differentiator"))
     terms = ", ".join(_text(t) for t in (vertical.get("terminology") or []))
+    vertical_label = _text(vertical.get("display_name") or vertical.get("vertical"))
 
     section_blocks: list[str] = []
     for section in sections:
@@ -106,13 +108,13 @@ def build_batch_instruction(
 - Write one clear **Talking point** (one sentence the presenter says first).
 - Write **full speaker notes** (multiple paragraphs — this is the product; not bullets-only).
 - Replace PLACEHOLDER_TALKING_POINT_{number} and PLACEHOLDER_SPEAKER_NOTES_{number} completely.
-- Do not invent a slide layout, slide numbers as a deck, or anything confusable with a .pptx.
+- Do not invent a slide layout or anything confusable with a presentation file.
 """.strip()
         )
 
     return f"""
 You are filling a SPEAKING SCRIPT document for {product_name} aimed at the
-{_text(vertical.get('display_name') or vertical.get('vertical'))} vertical.
+{vertical_label} vertical.
 
 CRITICAL: This is a speaking script — not a slide deck. Never imply a presentation
 file comes out. Use the label "slide-equivalent" only as a section name.
@@ -123,7 +125,7 @@ Product (held constant — do not reinvent the product):
 - Capabilities: {"; ".join(_text(c) for c in capabilities)}
 - Differentiator: {differentiator}
 
-Vertical knowledge (substance — draw from this, do NOT use a generic {{industry}} template):
+Vertical knowledge (substance — draw from this, do NOT use a generic industry template):
 - Buyer role: {_text(vertical.get("buyer_role"))}
 - Regulatory trigger: {_text(vertical.get("regulatory_trigger"))}
 - Document pain: {_text(vertical.get("document_pain"))}
@@ -162,6 +164,56 @@ async def _export_markdown_text(client: SuperDocsClient, session_id: str) -> str
     )
 
 
+async def _download_bytes(url: str) -> bytes:
+    async with httpx2.AsyncClient(timeout=None) as http:
+        response = await http.get(url)
+        response.raise_for_status()
+        return response.content
+
+
+async def export_narrative_files(
+    client: SuperDocsClient,
+    session_id: str,
+    vertical_code: str,
+    product_name: str = "ClarityDocs",
+    out_dir: Path | None = None,
+) -> dict[str, Path]:
+    """Export speaking script to markdown + docx under out/. Never a presentation path."""
+    dest = out_dir or OUT_DIR
+    dest.mkdir(parents=True, exist_ok=True)
+    slug = product_name.lower().replace(" ", "")
+    base = f"pitch-script-{vertical_code}-{slug}"
+
+    md_export = await client.export(
+        session_id=session_id,
+        format="markdown",
+        filename=base,
+    )
+    markdown = (
+        md_export.get("text")
+        or md_export.get("markdown")
+        or md_export.get("content")
+        or ""
+    )
+    md_path = dest / f"{base}.md"
+    md_path.write_text(markdown, encoding="utf-8")
+
+    docx_export = await client.export(
+        session_id=session_id,
+        format="docx",
+        filename=base,
+    )
+    download_url = docx_export.get("download_url")
+    if not download_url:
+        raise SuperDocsClientError(
+            "docx export returned no download_url. Fix: binary exports are documented "
+            "to return a signed download_url — check the response shape."
+        )
+    docx_path = dest / f"{base}.docx"
+    docx_path.write_bytes(await _download_bytes(download_url))
+    return {"markdown": md_path, "docx": docx_path}
+
+
 async def fill_narrative_sections(
     client: SuperDocsClient,
     session_id: str,
@@ -176,8 +228,6 @@ async def fill_narrative_sections(
     by_number = {int(s["number"]): s for s in sections}
     batches = chunk_section_numbers(numbers, max_batch=chat_batch_cap())
     responses: list[dict] = []
-    landed_all: list[int] = []
-    failed_all: list[int] = []
 
     async def fetch_post(sid: str) -> dict[int, str]:
         md = await _export_markdown_text(client, sid)
@@ -192,12 +242,10 @@ async def fill_narrative_sections(
             section_numbers=batch,
             pre_edit=pre_edit,
             fetch_post_edit=fetch_post,
-            max_batch=len(batch),  # already sized to cap
+            max_batch=len(batch),
             response_mode="compact",
         )
         responses.extend(result.get("responses") or [])
-        landed_all.extend(result.get("landed") or [])
-        failed_all.extend(result.get("failed") or [])
         logger.info(
             "batch %s ready_to_approve=%s landed=%s failed=%s",
             batch,
@@ -206,20 +254,6 @@ async def fill_narrative_sections(
             result.get("failed"),
         )
 
-    # Deduplicate while preserving order
-    def _uniq(items: list[int]) -> list[int]:
-        seen: set[int] = set()
-        out: list[int] = []
-        for i in items:
-            if i not in seen:
-                seen.add(i)
-                out.append(i)
-        return out
-
-    landed_u = _uniq(landed_all)
-    failed_u = [n for n in _uniq(failed_all) if n not in set(landed_u)]
-
-    # Approve any pending changes if the platform returned a HITL job.
     for response in responses:
         job_id = response.get("job_id") or (response.get("job") or {}).get("id")
         if not job_id:
@@ -251,11 +285,9 @@ async def generate_narrative(
     *,
     client: SuperDocsClient | None = None,
     session_id: str | None = None,
+    out_dir: Path | None = None,
 ) -> dict[str, Any]:
-    """Upload skeleton, fill from vertical knowledge, landed-check, approve path.
-
-    Export to files is layered in a later commit; this returns fill status + markdown.
-    """
+    """Upload skeleton, fill from vertical knowledge, landed-check, export md+docx."""
     bundle = load_validated()
     manifest = bundle["manifest"]
     product = bundle["product"]
@@ -265,8 +297,9 @@ async def generate_narrative(
             f"unknown vertical {vertical_code!r}; known: {sorted(verticals)}"
         )
     vertical = verticals[vertical_code]
+    product_block = product.get("product") or product
+    product_name = _text(product_block.get("name") or "ClarityDocs")
     skeleton = build_skeleton_html(manifest, product)
-    # Stamp vertical name into skeleton for the presenter.
     skeleton = skeleton.replace(
         "Vertical: (to be filled).",
         f"Vertical: {_text(vertical.get('display_name') or vertical_code)}.",
@@ -290,11 +323,19 @@ async def generate_narrative(
         fill = await fill_narrative_sections(
             client, sid, product, vertical, manifest, pre_edit
         )
-        markdown = await _export_markdown_text(client, sid)
+        paths = await export_narrative_files(
+            client,
+            sid,
+            vertical_code,
+            product_name=product_name,
+            out_dir=out_dir,
+        )
+        markdown = paths["markdown"].read_text(encoding="utf-8")
         return {
             "vertical": vertical_code,
             "session_id": sid,
             "markdown": markdown,
+            "paths": {k: str(v) for k, v in paths.items()},
             "landed": fill["landed"],
             "failed": fill["failed"],
             "ready": fill["ready"],
