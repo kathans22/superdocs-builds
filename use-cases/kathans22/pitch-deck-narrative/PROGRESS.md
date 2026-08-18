@@ -77,3 +77,11 @@ Do **not** loosen thresholds to pass weak packs — fix YAML / narratives instea
 - Three-vertical synthetic set → shared mean **1.0**, vertical mean below threshold, cell counts 3 shared / 6 vertical
 
 **Next:** Phase 2 — MCP client (2-section batch + landed-check ported from Build 1), still respecting CLAUDE.md.
+
+## Session 1 continued — Phase 2 / Prompt 7 (MCP client port)
+
+- `504ae59` feat(mcp): connect to SuperDocs MCP with bearer auth and named errors
+- `4769473` feat(mcp): add upload, chat, approve, export methods
+- `d896862` feat(mcp): auto-split any request over the configured batch cap
+- Image billing recorded in `docs/image-generation-billing.md` (next commit).
+- Cap: `SUPERDOCS_CHAT_BATCH_CAP` (default 2). 9 sections → 5 sequential chat calls.
