@@ -89,3 +89,50 @@ def test_guard_rejects_pptx_export_path() -> None:
 
     with pytest.raises(FormatGuardError, match=r"format_guard\.export_path"):
         assert_document_export_path("pptx")
+
+
+def test_guard_still_passes_with_image_bearing_export(tmp_path: Path) -> None:
+    """An image in a section must not make the export look like a slide deck."""
+    from generator.imagegen import PRESENTER_VISUAL_MARKER
+    from generator.narrative import parse_script_sections
+
+    lines = [
+        "# ClarityDocs — Pitch Speaking Script",
+        "",
+        f"**{SPEAKING_SCRIPT_DISCLAIMER}**",
+        "",
+        "Vertical: Fintech. Speaking sections only — not a slide canvas.",
+        "",
+        "## Slide-equivalent 6 — Proof / Case Study",
+        "",
+        "*Talking point:* HarborPay staged twelve findings in hours, not weeks.",
+        "",
+        f"![{PRESENTER_VISUAL_MARKER}: HarborPay staged vs rejected vs committed](presenter-visuals/fintech-section-6.png)",
+        "",
+        f"*{PRESENTER_VISUAL_MARKER}: HarborPay staged 12, rejected 4, committed 8.*",
+        "",
+        "*Speaker notes:* The visual is a presenter cue, not a slide.",
+        "",
+    ]
+    path = tmp_path / "pitch-script-fintech-claritydocs.md"
+    path.write_text("\n".join(lines), encoding="utf-8")
+    assert_not_deck(
+        path,
+        "ClarityDocs — Pitch Speaking Script",
+        export_format="markdown",
+    )
+    body = parse_script_sections(path.read_text(encoding="utf-8"))[6]
+    assert "presenter-visuals/fintech-section-6.png" in body
+    assert PRESENTER_VISUAL_MARKER.lower() in body.lower()
+
+
+def test_committed_fintech_image_demo_still_passes_guard() -> None:
+    from generator.manifest import project_root
+
+    path = project_root() / "evidence" / "image-demo" / "pitch-script-fintech-claritydocs.md"
+    assert path.is_file(), "image-demo export missing — Prompt 17 embed did not land"
+    assert_not_deck(
+        path,
+        "ClarityDocs — Pitch Speaking Script",
+        export_format="markdown",
+    )

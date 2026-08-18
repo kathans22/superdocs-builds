@@ -199,6 +199,16 @@ Do **not** loosen thresholds to pass weak packs — fix YAML / narratives instea
 
 ---
 
+## Session 2 continued — Phase 5 / Prompt 17 (Image wiring into export)
+
+- `fca3797` feat(narrative): embed generated images at their section with a caption
+- (this) test(guard): format guard still passes with an image-bearing export
+- Check: `tests/test_narrative_embed.py` + `tests/test_format_guard.py` — **PASS**.
+- Export post-process places the figure after the talking point of the named slide-equivalent, captioned `Presenter visual (not a slide): …`.
+- Demo (fintech §6): `evidence/image-demo/pitch-script-fintech-claritydocs.md` + `presenter-visuals/fintech-section-6.png`. Format guard **PASS** with the image present.
+
+---
+
 ## Handoff for the next chat session
 
 **Branch:** `kathans22/pitch-deck-narrative` (pushed; work only under `use-cases/kathans22/pitch-deck-narrative/`).
@@ -225,6 +235,7 @@ Idempotent: re-run of a finished vertical for the current manifest version → l
 **Evidence already committed (prefer these over gitignored `out/` / `state/`):**
 - `evidence/narratives/` — four speaking scripts + `.meta.json` image decisions
 - `evidence/image-eligibility.md` / `image-eligibility.json`
+- `evidence/image-demo/` — fintech speaking script with §6 presenter visual in place
 - `evidence/divergence-report.json` / `divergence-results.md`
 - `evidence/ledger-four-verticals.json` / `ops-reconciliation.md`
 - `evidence/bugs/` — SuperDocs surprises
