@@ -115,7 +115,7 @@ def _cmd_score(narratives_from: str) -> int:
         mark = " HOT" if cell.get("at_or_above_section_max") else ""
         print(
             f"vertical_cell section {cell['section']} "
-            f"{cell['vertical_a']}↔{cell['vertical_b']}: {cell['score']:.3f}{mark}"
+            f"{cell['vertical_a']}<->{cell['vertical_b']}: {cell['score']:.3f}{mark}"
         )
     print(f"score_report={result.get('report_path')}")
     return 0 if evaluation.get("passed") else 1
