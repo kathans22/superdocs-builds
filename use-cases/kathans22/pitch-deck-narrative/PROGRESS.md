@@ -297,3 +297,36 @@ Idempotent: re-run of a finished vertical for the current manifest version → l
 - `evidence/bugs/` — SuperDocs surprises
 
 **Commit hygiene reminder:** `git add` specific paths only; never stage `.env`, keys, emails, `out/`, or `state/`; `evidence/` is fine; push `kathans22/pitch-deck-narrative`.
+
+---
+
+## Phase 8 / ship — Prompts 22–26 (final)
+
+**What shipped**
+
+- Four vertical speaking scripts (legal, fintech, healthcare, edtech) via SuperDocs MCP; format guard (“Speaking script — not a slide deck”); divergence **PASS** (rescored vertical mean ~0.192, shared ~0.219).
+- Image eligibility + live insert where warranted; local mirrors under `evidence/narratives/presenter-visuals/` (and UI public copies).
+- FastAPI + React UI (divergence / verticals / generate / narratives); `docker compose up --build` one-command run with ERROR / Cause / Fix startup messages.
+- README (what / run / SuperDocs features / real divergence + ledger / bugs / limitations); BUG-001 and BUG-002 rollup; secret hygiene (placeholders only; absolute path stripped from live test).
+- CONTRIBUTING alignment: folder `use-cases/kathans22/pitch-deck-narrative/` only (`git diff --stat main...HEAD` has nothing outside); MIT `LICENSE` + README license note; demo = local compose URLs.
+
+**Ops (this build):** narrative ledger **39** chat ops across four verticals; live image insert **+8** chat ops. Export / score / UI snapshots = **0** SuperDocs ops.
+
+**What didn’t**
+
+- No hosted public demo URL or polished walkthrough screenshot PNGs under `docs/demo/` (placeholders only; demo is local compose).
+- UI vertical list still hardcoded to the four packs (not dynamic from API alone).
+- Image signed URLs still expire; healthcare still needed a post-export strip for BUG-002 extras.
+- Happy-path “5 ops/vertical” from CLAUDE was not reality once landed-check retries ran.
+
+**What’s next with more time**
+
+- Host a short demo (or fill `docs/demo/*.png`) and wire UI verticals from `GET /verticals`.
+- Harden image insert so BUG-002 cannot append junk sections; refresh or drop signed URLs in favor of mirrored assets only.
+- Optional: fifth vertical = YAML only; tighten ops budgeting / retry policy so ledger matches plan without manual `OPS_BUDGET_CAP` bumps.
+
+**PR description draft** (no email — paste into the GitHub PR):
+
+- **Name:** Kathan Shah
+- **Title:** ClarityDocs vertical pitch-script narrative generator
+- **Body:** Generates vertical-specific ClarityDocs speaking scripts (not slide decks) over SuperDocs MCP, with measured divergence across legal/fintech/healthcare/edtech, FastAPI + UI, and docker-compose one-command run.
