@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+from contextlib import asynccontextmanager
+from pathlib import Path
+
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 
@@ -13,6 +17,34 @@ from generator.service import (
     narrative_export_path,
     run_verticals,
 )
+from generator.startup_checks import require_runtime_config
+
+
+def _load_dotenv() -> None:
+    """Load KEY=VALUE from project ``.env`` without overriding existing env."""
+    env_path = Path(__file__).resolve().parents[3] / ".env"
+    if not env_path.is_file():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, value = stripped.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    _load_dotenv()
+    # Unit tests set PITCH_SKIP_API_KEY_CHECK=1 — they never call SuperDocs.
+    require_runtime_config(
+        require_api_key=os.environ.get("PITCH_SKIP_API_KEY_CHECK") != "1"
+    )
+    yield
+
 
 app = FastAPI(
     title="ClarityDocs pitch-script generator",
@@ -21,6 +53,7 @@ app = FastAPI(
         "Not a slide deck. POST /generate returns a run id immediately; poll GET /runs/{id}."
     ),
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 

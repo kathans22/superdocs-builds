@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+
+# Lifespan refuses to boot without a key; unit tests never call SuperDocs.
+os.environ["PITCH_SKIP_API_KEY_CHECK"] = "1"
 
 from fastapi.testclient import TestClient
 

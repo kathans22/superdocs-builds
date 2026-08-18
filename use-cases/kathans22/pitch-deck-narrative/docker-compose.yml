@@ -9,8 +9,10 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    # Compose fails early if .env is absent — entrypoint also names Cause/Fix.
     env_file:
-      - .env
+      - path: .env
+        required: true
     environment:
       SUPERDOCS_CHAT_BATCH_CAP: ${SUPERDOCS_CHAT_BATCH_CAP:-2}
       OPS_BUDGET_CAP: ${OPS_BUDGET_CAP:-200}
