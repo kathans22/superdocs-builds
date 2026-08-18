@@ -5,6 +5,7 @@ const LINKS: { id: Screen; label: string }[] = [
   { id: 'divergence', label: 'Divergence' },
   { id: 'verticals', label: 'Verticals' },
   { id: 'generate', label: 'Generate' },
+  { id: 'narratives', label: 'Narratives' },
 ]
 
 type Props = {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Divergence from './Divergence.tsx'
 import Generate from './Generate.tsx'
+import Narratives from './Narratives.tsx'
 import Nav from './Nav.tsx'
 import Verticals from './Verticals.tsx'
 import type { LedgerSnapshot } from './api'
@@ -29,6 +30,8 @@ export default function App() {
         <Verticals file={verticals as VerticalsFile} />
       ) : screen === 'generate' ? (
         <Generate snapshot={ledgerSnapshot as LedgerSnapshot} />
+      ) : screen === 'narratives' ? (
+        <Narratives />
       ) : (
         <Divergence report={report as DivergenceReport} />
       )}
