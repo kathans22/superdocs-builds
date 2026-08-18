@@ -141,3 +141,21 @@ Do **not** loosen thresholds to pass weak packs — fix YAML / narratives instea
 3. Idempotent re-run reports **SKIPPED** for the generate step; ops total unchanged.
 
 **Next:** Phase 4 — images on `image_eligible` sections; multi-vertical generate + live divergence report.
+
+## Session 1 continued — Phase 4 / Prompt 13 (Fintech + healthcare)
+
+- `ac50c7a` feat(narrative): generate the fintech vertical narrative
+- `83e5d41` feat(narrative): generate the healthcare vertical narrative
+- `ea89bea` chore(evidence): commit the three narrative exports for side-by-side review
+- Exports under `evidence/narratives/` (+ `problem-section-side-by-side.md`).
+- Problem-section Jaccard: legal↔fintech **0.167**, legal↔healthcare **0.131**, fintech↔healthcare **0.153** — below 0.55; **not** find-and-replace.
+- Cumulative ops after three verticals: **31**.
+
+## Session 1 continued — Phase 4 / Prompt 14 (Edtech + full divergence)
+
+- `4fb2d71` feat(narrative): generate the edtech vertical narrative
+- `fd0e4e3` feat(divergence): run the full four-vertical scoring pass
+- `acd77a8` chore(evidence): commit the divergence report
+- docs commit: divergence results + rework notes
+- Four-vertical report: mean vertical **0.115** (&lt; 0.40), mean shared **0.186**, **PASS**, no hot vertical cells (≥ 0.55).
+- Rework: edtech section 7 heading drifted off `Slide-equivalent 7 — …` — unscored (0.0 cells); fix heading before trusting Objection for edtech pairs.
