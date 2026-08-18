@@ -39,11 +39,6 @@ IMAGE_GENERATION_BILLING_NOTE = (
     "agent-editing playbook."
 )
 
-logger = logging.getLogger(__name__)
-
-# Caption SuperDocs is asked to place with a generated figure — also the land marker.
-PRESENTER_VISUAL_MARKER = "Presenter visual (not a slide)"
-
 # Generic / unfilled bodies are not visualizable — do not invent a figure for them.
 _PLACEHOLDER_RE = re.compile(
     r"PLACEHOLDER_|\[Insert speaker script here\]|Insert speaker script",
@@ -438,6 +433,9 @@ def charge_image_operations(
             }
         )
     return charged
+
+
+class ImageChatClient(Protocol):
     """Minimal chat surface used for image insertion (real SuperDocsClient or a test double)."""
 
     async def chat(
@@ -589,7 +587,6 @@ async def generate_images_for_markdown(
     Export is 0 ops. Operation charging is a separate step.
     """
     from .mcp_client import SuperDocsClient
-    from .narrative import export_narrative_files
 
     path = Path(markdown_path)
     plan, meta_path = decide_and_record(path, vertical=vertical)
@@ -615,12 +612,30 @@ async def generate_images_for_markdown(
             ledger=ledger,
         )
         dest = out_dir or path.parent
+        from .narrative import (
+            _guard_export_or_raise,
+            _script_title,
+            embed_images_into_markdown,
+            embeds_from_generated_results,
+            export_narrative_files,
+        )
+
         paths = await export_narrative_files(
             client,
             sid,
             plan.vertical,
             out_dir=dest,
         )
+        markdown = paths["markdown"].read_text(encoding="utf-8")
+        embeds = embeds_from_generated_results(results, markdown)
+        if embeds:
+            markdown = embed_images_into_markdown(markdown, embeds)
+            paths["markdown"].write_text(markdown, encoding="utf-8")
+            _guard_export_or_raise(
+                paths["markdown"],
+                title=_script_title("ClarityDocs"),
+                export_format="markdown",
+            )
         # Keep metadata beside the (possibly overwritten) export.
         write_narrative_metadata(paths["markdown"], plan)
         return {

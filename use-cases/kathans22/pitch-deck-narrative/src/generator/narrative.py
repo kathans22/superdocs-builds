@@ -11,6 +11,7 @@ import logging
 import re
 import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -159,6 +160,206 @@ def parse_script_sections(markdown: str) -> dict[int, str]:
     return bodies
 
 
+_SECTION_HEADING_RE = re.compile(
+    r"(^##\s+Slide-equivalent\s+(\d+)[^\n]*\n)",
+    re.MULTILINE,
+)
+_TALKING_POINT_LINE_RE = re.compile(
+    r"(?im)^([*_]*talking point:?[*_]*[^\n]*\n)",
+)
+_IMG_SRC_RE = re.compile(
+    r"!\[([^\]]*)\]\(([^)]+)\)|<img[^>]+src=['\"]([^'\"]+)['\"]",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class SectionImageEmbed:
+    """A generated supporting image to land in one slide-equivalent section."""
+
+    section_number: int
+    caption: str
+    src: str
+    alt: str | None = None
+
+
+def presenter_visual_caption(detail: str) -> str:
+    """Canonical caption: presenter support, never slide chrome."""
+    from .imagegen import PRESENTER_VISUAL_MARKER
+
+    detail = " ".join((detail or "").split()).strip().rstrip(".")
+    if not detail:
+        return PRESENTER_VISUAL_MARKER
+    if detail.lower().startswith(PRESENTER_VISUAL_MARKER.lower()):
+        return detail
+    return f"{PRESENTER_VISUAL_MARKER}: {detail}"
+
+
+def figure_markdown(embed: SectionImageEmbed) -> str:
+    caption = presenter_visual_caption(embed.caption)
+    alt = embed.alt or caption
+    return f"![{alt}]({embed.src})\n\n*{caption}*\n"
+
+
+def first_image_src(text: str) -> str | None:
+    """First markdown or HTML image src in a section body, if any."""
+    match = _IMG_SRC_RE.search(text or "")
+    if not match:
+        return None
+    return (match.group(2) or match.group(3) or "").strip() or None
+
+
+def embeds_from_generated_results(
+    results: list[dict[str, Any]],
+    markdown: str,
+) -> list[SectionImageEmbed]:
+    """Build section embeds from generate-image results + exported markdown srcs."""
+    bodies = parse_script_sections(markdown)
+    embeds: list[SectionImageEmbed] = []
+    for row in results:
+        if row.get("skipped") or not row.get("generated"):
+            continue
+        number = int(row["section_number"])
+        body = bodies.get(number, "")
+        src = first_image_src(body) or str(row.get("image_src") or "").strip()
+        if not src:
+            continue
+        embeds.append(
+            SectionImageEmbed(
+                section_number=number,
+                caption=str(row.get("reason") or row.get("title") or ""),
+                src=src,
+            )
+        )
+    return embeds
+
+
+def _insert_figure_in_section(body: str, embed: SectionImageEmbed) -> str:
+    from .imagegen import PRESENTER_VISUAL_MARKER, section_has_supporting_visual
+
+    figure = figure_markdown(embed)
+    if section_has_supporting_visual(body):
+        if embed.src and embed.src in body:
+            if PRESENTER_VISUAL_MARKER.lower() not in body.lower():
+                return body.rstrip() + "\n\n" + f"*{presenter_visual_caption(embed.caption)}*\n"
+            return body
+        # Wrong place or missing src — still add a correctly captioned figure after TP.
+    match = _TALKING_POINT_LINE_RE.search(body)
+    if match:
+        return body[: match.end()] + "\n" + figure + "\n" + body[match.end() :]
+    return figure + "\n" + body
+
+
+def embed_images_into_markdown(
+    markdown: str,
+    embeds: list[SectionImageEmbed],
+) -> str:
+    """Place each generated image in its slide-equivalent section with a caption.
+
+    Inserts after the talking point (presenter reads notes around a visual), never
+    as a slide canvas. Idempotent when the same src is already in that section.
+    """
+    if not embeds:
+        return markdown
+    by_number = {int(e.section_number): e for e in embeds}
+    matches = list(_SECTION_HEADING_RE.finditer(markdown or ""))
+    if not matches:
+        raise ValueError(
+            "no '## Slide-equivalent N' headings — cannot embed images at a section. "
+            "Fix: export the speaking-script markdown first."
+        )
+    prefix = markdown[: matches[0].start()]
+    pieces: list[str] = [prefix]
+    for i, match in enumerate(matches):
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(markdown)
+        heading = match.group(1)
+        number = int(match.group(2))
+        body = markdown[match.end() : end]
+        embed = by_number.get(number)
+        if embed is not None:
+            body = _insert_figure_in_section(body, embed)
+        pieces.append(heading + body)
+    return "".join(pieces)
+
+
+def write_presenter_chart_png(
+    path: Path,
+    *,
+    values: tuple[int, ...] = (12, 4, 8),
+    labels: tuple[str, ...] = ("Staged", "Rejected", "Committed"),
+) -> Path:
+    """Write a small bar chart PNG (no extra dependency) for a presenter visual."""
+    import struct
+    import zlib
+
+    width, height = 480, 240
+    bg = (252, 250, 247)
+    bar_colors = ((47, 93, 140), (166, 68, 72), (62, 128, 96))
+    rows = bytearray()
+    max_v = max(values) if values else 1
+    left, right, top, bottom = 48, 24, 28, 36
+    chart_w = width - left - right
+    chart_h = height - top - bottom
+    n = len(values)
+    gap = 16
+    bar_w = max(8, (chart_w - gap * (n + 1)) // max(n, 1))
+
+    def pixel(x: int, y: int) -> tuple[int, int, int]:
+        if x < 0 or y < 0 or x >= width or y >= height:
+            return bg
+        # baseline
+        if top + chart_h - 1 <= y <= top + chart_h + 1 and left <= x <= width - right:
+            return (40, 40, 40)
+        for i, value in enumerate(values):
+            x0 = left + gap + i * (bar_w + gap)
+            x1 = x0 + bar_w
+            bar_h = int(chart_h * (value / max_v))
+            y0 = top + chart_h - bar_h
+            if x0 <= x < x1 and y0 <= y < top + chart_h:
+                return bar_colors[i % len(bar_colors)]
+        return bg
+
+    for y in range(height):
+        rows.append(0)  # filter none
+        for x in range(width):
+            r, g, b = pixel(x, y)
+            rows.extend((r, g, b))
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        crc = zlib.crc32(tag + data) & 0xFFFFFFFF
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", crc)
+
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", ihdr)
+        + chunk(b"IDAT", zlib.compress(bytes(rows), 9))
+        + chunk(b"IEND", b"")
+    )
+    return path
+
+
+def write_image_bearing_script(
+    source_markdown: Path,
+    dest_dir: Path,
+    embeds: list[SectionImageEmbed],
+    *,
+    product_name: str = "ClarityDocs",
+) -> dict[str, Path]:
+    """Copy a speaking script, embed captioned images, guard the export."""
+    dest = Path(dest_dir)
+    dest.mkdir(parents=True, exist_ok=True)
+    source = Path(source_markdown)
+    markdown = embed_images_into_markdown(source.read_text(encoding="utf-8"), embeds)
+    md_path = dest / source.name
+    md_path.write_text(markdown, encoding="utf-8")
+    title = _script_title(product_name)
+    _guard_export_or_raise(md_path, title=title, export_format="markdown")
+    return {"markdown": md_path}
+
+
 async def _export_markdown_text(client: SuperDocsClient, session_id: str) -> str:
     export = await client.export(session_id=session_id, format="markdown")
     return (
@@ -201,11 +402,16 @@ async def export_narrative_files(
     vertical_code: str,
     product_name: str = "ClarityDocs",
     out_dir: Path | None = None,
+    image_embeds: list[SectionImageEmbed] | None = None,
 ) -> dict[str, Path]:
     """Export speaking script to markdown + docx under out/. Never a presentation path.
 
     No export completes without passing format_guard.assert_not_deck. A guard
     failure blocks the export and names which check failed.
+
+    ``image_embeds`` re-homes generated figures into the named slide-equivalent
+    with a presenter caption so SuperDocs placement drift cannot leave a visual
+    floating outside its section.
     """
     dest = out_dir or OUT_DIR
     dest.mkdir(parents=True, exist_ok=True)
@@ -224,6 +430,8 @@ async def export_narrative_files(
         or md_export.get("content")
         or ""
     )
+    if image_embeds:
+        markdown = embed_images_into_markdown(markdown, image_embeds)
     md_path = dest / f"{base}.md"
     md_path.write_text(markdown, encoding="utf-8")
     _guard_export_or_raise(md_path, title=title, export_format="markdown")
