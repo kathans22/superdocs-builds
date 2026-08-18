@@ -52,3 +52,17 @@ def test_fetch_narrative_export(tmp_path: Path, monkeypatch) -> None:
     response = client.get("/narratives/legal")
     assert response.status_code == 200
     assert "Speaking script" in response.text
+
+
+def test_divergence_and_ledger_routes() -> None:
+    client = TestClient(app)
+    div = client.get("/divergence")
+    assert div.status_code == 200
+    body = div.json()
+    assert "verticals" in body or body.get("status") == "deferred"
+    led = client.get("/ledger")
+    assert led.status_code == 200
+    snap = led.json()
+    assert "total_operations" in snap
+    assert "entries" in snap
+    assert isinstance(snap["entries"], list)

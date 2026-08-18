@@ -6,6 +6,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from generator.service import (
+    divergence_report,
+    ledger_snapshot,
     list_verticals,
     narrative_export_path,
     run_verticals,
@@ -60,3 +62,13 @@ def get_narrative(
         else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
     return FileResponse(path, media_type=media, filename=path.name)
+
+
+@app.get("/divergence")
+def get_divergence() -> dict:
+    return divergence_report()
+
+
+@app.get("/ledger")
+def get_ledger() -> dict:
+    return ledger_snapshot()

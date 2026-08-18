@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from .divergence import write_divergence_report
 from .format_guard import assert_not_deck
-from .ledger import Ledger
+from .ledger import LEDGER_PATH, Ledger
 from .manifest import load_validated, project_root
 from .narrative import OUT_DIR, generate_narrative, parse_script_sections
 
@@ -309,4 +310,35 @@ async def run_verticals(
         "verticals": targets,
         "results": results,
         "ops_total": results[-1]["ops_total"] if results else 0,
+    }
+
+
+def divergence_report(*, narratives_dir: Path | None = None) -> dict[str, Any]:
+    """Return the on-disk divergence report, or score locally if none is stored."""
+    import json
+
+    path = DIVERGENCE_REPORT_PATH
+    if narratives_dir is None and path.is_file() and path.stat().st_size > 0:
+        return json.loads(path.read_text(encoding="utf-8"))
+    return score_available(narratives_dir=narratives_dir, report_path=path)
+
+
+def ledger_snapshot(*, ledger_path: Path | None = None) -> dict[str, Any]:
+    """Live state ledger, falling back to the committed four-vertical snapshot."""
+    path = ledger_path or LEDGER_PATH
+    if path.is_file():
+        ledger = Ledger.load(path)
+        source = str(path)
+    else:
+        snapshot = EVIDENCE_DIR / "ledger-four-verticals.json"
+        if snapshot.is_file():
+            ledger = Ledger.load(snapshot)
+            source = str(snapshot)
+        else:
+            ledger = Ledger()
+            source = None
+    return {
+        "source": source,
+        "total_operations": ledger.total_operations,
+        "entries": [asdict(e) for e in ledger.entries],
     }
