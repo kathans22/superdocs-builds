@@ -174,6 +174,15 @@ Logged in the working agreement; not revisited mid-build:
 - Treats leftover placeholders / generic filler as unwarranted (correct intent) but earlier exports with `PLACEHOLDER_*` lines zeroed legal images until those sections were rewritten.
 - Relies on SuperDocs chat for the actual bitmap; the API has appended extra generic sections / `placeholder.com` stubs (BUG-002) that had to be stripped by hand. Signed GCS URLs expire (~24h); this repo mirrors figures under `evidence/narratives/presenter-visuals/`.
 
+## What broke
+
+Bug evidence written during this build (submission-form rollup). Full write-ups live under [`evidence/bugs/`](evidence/bugs/).
+
+| Id | One line | How badly it blocked | Workaround |
+|---|---|---|---|
+| [BUG-001](evidence/bugs/BUG-001-placeholder-leftovers.md) | Batched section fill left `PLACEHOLDER_*` tokens / duplicate talking-point blocks after “successful” chats | Workable — first-pass quality uneven; weak landed-check falsely passed until tightened | Fail landed-check if placeholders remain; split-retry failed sections alone; keep batch cap 2 |
+| [BUG-002](evidence/bugs/BUG-002-image-insert-extra-sections.md) | Image-insert chat appended extra generic `## Section N` blocks and `placeholder.com` figures alongside real images | Partial — scorer still found real §6/§8 headings, but the speaking script was dirty | Strip the extra sections and stub images from the export; mirror real figures under `evidence/narratives/presenter-visuals/` |
+
 ## License
 
 MIT
