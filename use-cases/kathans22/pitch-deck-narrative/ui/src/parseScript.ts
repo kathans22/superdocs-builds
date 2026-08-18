@@ -13,9 +13,6 @@ export type ScriptSection = {
 
 export function rewriteFigureSrc(src: string): string {
   const cleaned = src.replace(/\\/g, '/').replace(/^\.\//, '')
-  if (cleaned.includes('fintech-section-6')) {
-    return '/presenter-visuals/fintech-section-6.svg'
-  }
   if (cleaned.startsWith('http') || cleaned.startsWith('/')) return cleaned
   return `/${cleaned}`
 }

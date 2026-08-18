@@ -283,10 +283,10 @@ Idempotent: re-run of a finished vertical for the current manifest version → l
 **API key:** not in this repo. Load from env or local `.env` (gitignored). Dev habit has been Build 1’s `.env` under `policy-pack-localizer` — never commit keys/emails.
 
 **Known defects to carry forward (do not rediscover):**
-1. **edtech §7** — export heading is not `## Slide-equivalent 7 — Objection Handling`; scorer treats Objection as empty for edtech pairs. Rework heading or regenerate that section before trusting Objection cells.
-2. **BUG-001 class** — leftover `PLACEHOLDER_*` lines under some filled sections (see `evidence/bugs/BUG-001-placeholder-leftovers.md`). Landed-check was tightened; quality still uneven on older legal export. This also zeros legal (and some Proof) **image** eligibility until those sections have real substance.
-3. **Ops budgeting** — plan **~8–12 ops/vertical** with retries on, not CLAUDE’s happy-path 5. Four verticals cost **39** this run. Image inserts: **1 chat op each** where warranted (~4 more when the live pass runs).
-4. **Legal images** — Prompt 16 decided **no** on both eligible sections. Demo still needs ≥1 image per vertical after legal Proof/ROI are real.
+1. **Signed SuperDocs image URLs expire (~24h)** — exports now mirror figures under `evidence/narratives/presenter-visuals/` (and `ui/public/presenter-visuals/`). Prefer those local files.
+2. **BUG-002** — healthcare image chat also appended generic `## Section N` blocks and `placeholder.com` figures; stripped from the evidence markdown. See `evidence/bugs/BUG-002-image-insert-extra-sections.md`.
+3. **Ops budgeting** — plan **~8–12 ops/vertical** with retries on, not CLAUDE’s happy-path 5. Four verticals originally cost **39**. Live image insert this pass: **8 chat ops** (two warranted figures × four verticals).
+4. **Secrets** — `.env` and `.cursor/mcp.json` hold the live key and are gitignored. Copy `.env.example` / `.cursor/mcp.json.example`. Never commit a Bearer token. `OPS_BUDGET_CAP=20` in `.env` will block a run against the 39-op ledger; raise it in the shell for image/generate work.
 
 **Evidence already committed (prefer these over gitignored `out/` / `state/`):**
 - `evidence/narratives/` — four speaking scripts + `.meta.json` image decisions

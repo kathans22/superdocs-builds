@@ -150,9 +150,7 @@ export default function Narratives({ initial = 'fintech' }: Props) {
   )
 }
 
-function imageSummary(code: string, liveCount: number | null): string {
-  if (code === 'fintech') {
-    return liveCount && liveCount > 0 ? `${liveCount} embedded` : 'demo figure'
-  }
-  return 'none forced'
+function imageSummary(_code: string, liveCount: number | null): string {
+  if (liveCount && liveCount > 0) return `${liveCount} embedded`
+  return '2 warranted'
 }

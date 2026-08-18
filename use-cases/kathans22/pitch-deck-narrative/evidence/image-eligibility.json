@@ -1,23 +1,21 @@
 {
   "billing": "chat_operation",
   "billing_certain": true,
-  "billing_note": "AI image generation is billed as a normal document-edit chat operation (typically 1 op; not a distinct image SKU). Upload, export, and a skipped unwarranted section are 0 ops. Source: docs/image-generation-billing.md checked 18 August 2026 against Plans & Usage, Attachments, and the agent-editing playbook.",
-  "live_generation_this_session": false,
-  "live_generation_blocker": "SUPERDOCS_API_KEY not present in this environment; decisions recorded first as required.",
+  "live_generation_this_session": true,
   "verticals": [
     {
       "vertical": "edtech",
       "source_path": "evidence\\narratives\\pitch-script-edtech-claritydocs.md",
       "manifest_version": 1,
-      "decided_at": "2026-08-18T11:34:03.933178+00:00",
+      "decided_at": "2026-08-18T16:48:33.178035+00:00",
       "note": "Decisions recorded before image generation. warranted=false means no image will be requested.",
       "sections": [
         {
           "section_number": 6,
           "title": "Proof / Case Study",
           "image_eligible": true,
-          "warranted": false,
-          "reason": "section body is placeholder or generic filler, not visualizable substance"
+          "warranted": true,
+          "reason": "proof names comparative counts a figure would make scanable"
         },
         {
           "section_number": 8,
@@ -32,7 +30,7 @@
       "vertical": "fintech",
       "source_path": "evidence\\narratives\\pitch-script-fintech-claritydocs.md",
       "manifest_version": 1,
-      "decided_at": "2026-08-18T11:34:03.938103+00:00",
+      "decided_at": "2026-08-18T16:48:33.183211+00:00",
       "note": "Decisions recorded before image generation. warranted=false means no image will be requested.",
       "sections": [
         {
@@ -55,15 +53,15 @@
       "vertical": "healthcare",
       "source_path": "evidence\\narratives\\pitch-script-healthcare-claritydocs.md",
       "manifest_version": 1,
-      "decided_at": "2026-08-18T11:34:03.944367+00:00",
+      "decided_at": "2026-08-18T16:48:33.189230+00:00",
       "note": "Decisions recorded before image generation. warranted=false means no image will be requested.",
       "sections": [
         {
           "section_number": 6,
           "title": "Proof / Case Study",
           "image_eligible": true,
-          "warranted": false,
-          "reason": "section body is placeholder or generic filler, not visualizable substance"
+          "warranted": true,
+          "reason": "proof names comparative counts a figure would make scanable"
         },
         {
           "section_number": 8,
@@ -78,22 +76,22 @@
       "vertical": "legal",
       "source_path": "evidence\\narratives\\pitch-script-legal-claritydocs.md",
       "manifest_version": 1,
-      "decided_at": "2026-08-18T11:34:03.949345+00:00",
+      "decided_at": "2026-08-18T16:48:33.195884+00:00",
       "note": "Decisions recorded before image generation. warranted=false means no image will be requested.",
       "sections": [
         {
           "section_number": 6,
           "title": "Proof / Case Study",
           "image_eligible": true,
-          "warranted": false,
-          "reason": "section body is placeholder or generic filler, not visualizable substance"
+          "warranted": true,
+          "reason": "proof names comparative counts a figure would make scanable"
         },
         {
           "section_number": 8,
           "title": "ROI / Business Case",
           "image_eligible": true,
-          "warranted": false,
-          "reason": "ROI is qualitative; no figures a chart would clarify"
+          "warranted": true,
+          "reason": "ROI names quantities or time/cost comparisons a chart would clarify"
         }
       ]
     }
