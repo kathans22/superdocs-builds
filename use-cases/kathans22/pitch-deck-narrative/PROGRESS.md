@@ -209,6 +209,14 @@ Do **not** loosen thresholds to pass weak packs — fix YAML / narratives instea
 
 ---
 
+## Session 2 continued — Phase 6 / Prompt 18 (Compliance pass)
+
+- One §5 fail: healthcare export claimed HIPAA was met "by design" and treated PHI redaction as automatic (`PHI redacted, of course`).
+- Fill instructions now forbid certification and guaranteed-redaction overclaims; healthcare evidence script rewritten; `tests/test_compliance.py` scans exports.
+- Other §5 checks **PASS** (ON SuperDocs, fictional clients, no roadmap dependency).
+
+---
+
 ## Handoff for the next chat session
 
 **Branch:** `kathans22/pitch-deck-narrative` (pushed; work only under `use-cases/kathans22/pitch-deck-narrative/`).

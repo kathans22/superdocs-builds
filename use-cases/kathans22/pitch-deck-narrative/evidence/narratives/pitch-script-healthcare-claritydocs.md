@@ -59,7 +59,7 @@ A lot of tools promise to 'clean' or 'redact' data, but they often blur PHI into
 
 ClarityDocs is built for proof, not polish, which is why it enforces a human gate at every stage. We don't 'guarantee' the removal of PHI or suggest that you can ship discharge instructions without clinical review. Instead, we stage every finding against your site-specific clinical protocols. When the system identifies a discrepancy or an outdated protocol, it surfaces that finding for a named human quality lead to accept or reject. You own the protocol; you own the clinical wording. We just ensure that the 'minimum necessary' PHI standards are tracked and that your consistency checks aren't missed during the manual shuffle. You maintain the gatekeeper role; we just make sure the gatekeeper has the right evidence in front of them.
 
-The system stages every finding against your own site-specific playbooks and checklists. Nothing changes in your packet until a named human gate clicks 'Approve.' You keep full control over clinical wording and redaction, ensuring that you meet HIPAA 'minimum necessary' expectations while actually improving your consistency across the care pathway.
+The system stages every finding against your own site-specific playbooks and checklists. Nothing changes in your packet until a named human gate clicks 'Approve.' You keep full control over clinical wording and redaction. Findings that look like PHI are staged for a named human to review — we do not promise audited or guaranteed removal of personal data.
 
 ## Slide-equivalent 8 — ROI / Business Case
 
@@ -71,13 +71,13 @@ Quality leads often struggle with the drift between site protocols. When dischar
 
 ClarityDocs ingests these fragmented site protocols and stages them against your master clinical playbook. You get an immediate ROI on clinical consistency. In our Cedar Ward pilot, we moved from months of drifted protocol updates to a staged, automated review that rejected two over-strong recovery claims immediately, while safely keeping the rest of the standard instructions. This isn't just about saving time; it is about automating the gate that protects your facility’s accreditation.
 
-The result is a consistent, audit-ready care pathway that meets HIPAA minimum necessary expectations and payer documentation standards by design. You can finally demonstrate control over every line of text that touches a patient, without having to perform the impossible task of manually auditing every discharge document produced across your network.
+The result is a consistent, reviewable care pathway with citations back to each source page — orientation to HIPAA minimum-necessary pressure, not a claim that ClarityDocs is HIPAA certified or that payer standards are met by design. You can finally show a named human what moved, without having to perform the impossible task of manually auditing every discharge document produced across your network.
 
 *Speaker notes:* Quality leads often struggle with the drift between site protocols. When discharge packets vary across locations, the risk isn't just administrative—it is clinical consistency. The manual comparison of these pathways is incredibly expensive, but the risk of shipping clinical claims that lack internal approval is non-negotiable. Your quality review teams currently spend weeks on item-by-item alignment across sites, often catching rogue clinical wording only after it has already circulated for months.
 
 ClarityDocs ingests these fragmented site protocols and stages them against your master clinical playbook. You get an immediate ROI on clinical consistency. In our Cedar Ward pilot, we moved from months of drifted protocol updates to a staged, automated review that rejected two over-strong recovery claims immediately, while safely keeping the rest of the standard instructions. This isn't just about saving time; it is about automating the gate that protects your facility’s accreditation.
 
-The result is a consistent, audit-ready care pathway that meets HIPAA minimum necessary expectations and payer documentation standards by design. You can finally demonstrate control over every line of text that touches a patient, without having to perform the impossible task of manually auditing every discharge document produced across your network.
+The result is a consistent, reviewable care pathway with citations back to each source page — orientation to HIPAA minimum-necessary pressure, not a claim that ClarityDocs is HIPAA certified or that payer standards are met by design. You can finally show a named human what moved, without having to perform the impossible task of manually auditing every discharge document produced across your network.
 
 ## Slide-equivalent 9 — Call to Action
 
@@ -86,7 +86,7 @@ The result is a consistent, audit-ready care pathway that meets HIPAA minimum ne
 *Speaker notes:*
 If you’re ready to see how this works with your own protocols, I’d like to offer a hands-on look at the system. Bring us one of your current clinical review tasks—something that has been a pain point or a bottleneck for your team. We can walk through how ClarityDocs ingests that content and stages the human-gated review process that your care pathways require.
 
-This isn't about running a demo for you; it's about seeing if we can actually solve the drift you're seeing across your site packets. Let’s sit down, load your actual data—PHI redacted, of course—and see if we can produce a verified, exportable discharge instruction packet that gives your quality team the assurance they need. There’s no obligation, just a test drive on the specific quality challenges your clinical operations team is facing today.
+This isn't about running a demo for you; it's about seeing if we can actually solve the drift you're seeing across your site packets. Let’s sit down with a synthetic site packet (no real PHI) and walk the human-gated review. Any redaction is a named human’s decision, not a guaranteed machine removal. There’s no obligation, just a test drive on the specific quality challenges your clinical operations team is facing today.
 
 *Talking Point:* I invite you to see ClarityDocs in action today by testing it against a live review task from your own clinical workflow.
 

@@ -145,6 +145,12 @@ Fill ONLY these sections:
 For shared-weight sections, keep product framing consistent but still write real notes.
 For vertical-weight sections, the talking point and notes MUST reflect this vertical's
 specific buyer, pain, objection, and proof — not a noun-swapped generic pitch.
+
+COMPLIANCE (non-negotiable — task2-guidelines §5):
+- Do not claim ClarityDocs or SuperDocs is certified (HIPAA, SOC 2, FERPA, COPPA, ISO, or any other).
+- Regulatory names (HIPAA, SOC 2, FERPA, BSA/AML, ABA rules) are the buyer's context only — orientation, never a certification of this product.
+- Do not write that a care pathway, export, or workflow "meets HIPAA … by design" or that the buyer "meets HIPAA" because they used the tool.
+- Do not promise audited or guaranteed removal/redaction of personal data. Redaction is human-reviewed and must be said that way. Never "PHI redacted, of course".
 """.strip()
 
 
