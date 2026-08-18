@@ -105,3 +105,71 @@ def test_metadata_written_before_generation_contains_reasons(tmp_path: Path) -> 
     assert by_n[8]["warranted"] is True
     assert plan.sections[0].reason
     assert "before image generation" in payload["note"].lower()
+
+
+def test_generate_only_where_decision_is_yes() -> None:
+    """Chat is issued only for warranted sections; skipped sections never call the client."""
+    import asyncio
+
+    from generator.imagegen import (
+        ImageDecision,
+        NarrativeImagePlan,
+        generate_images_from_plan,
+    )
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.calls: list[int] = []
+
+        async def chat(self, message: str, session_id: str, **kwargs):
+            nums = kwargs.get("section_numbers") or []
+            self.calls.extend(int(n) for n in nums)
+            return {"ok": True, "message": message}
+
+    plan = NarrativeImagePlan(
+        vertical="fintech",
+        source_path="unused.md",
+        manifest_version=1,
+        decided_at="2026-08-18T00:00:00+00:00",
+        sections=[
+            ImageDecision(6, "Proof / Case Study", True, True, "comparative counts"),
+            ImageDecision(8, "ROI / Business Case", True, False, "qualitative only"),
+        ],
+    )
+    client = FakeClient()
+    results = asyncio.run(generate_images_from_plan(client, "sess-1", plan, metadata_path=None))
+    assert client.calls == [6]
+    by_n = {row["section_number"]: row for row in results}
+    assert by_n[6]["generated"] is True and by_n[6]["skipped"] is False
+    assert by_n[8]["generated"] is False and by_n[8]["skipped"] is True
+
+
+def test_generate_refuses_without_metadata_file(tmp_path: Path) -> None:
+    import asyncio
+
+    from generator.imagegen import (
+        ImageDecision,
+        NarrativeImagePlan,
+        generate_images_from_plan,
+    )
+
+    plan = NarrativeImagePlan(
+        vertical="legal",
+        source_path="x.md",
+        manifest_version=1,
+        decided_at="t",
+        sections=[ImageDecision(6, "Proof / Case Study", True, True, "yes")],
+    )
+
+    class FakeClient:
+        async def chat(self, message: str, session_id: str, **kwargs):
+            raise AssertionError("must not chat when metadata is missing")
+
+    missing = tmp_path / "pitch-script-legal-claritydocs.meta.json"
+    try:
+        asyncio.run(
+            generate_images_from_plan(FakeClient(), "s", plan, metadata_path=missing)
+        )
+        raise AssertionError("expected FileNotFoundError")
+    except FileNotFoundError as exc:
+        assert "metadata missing" in str(exc)

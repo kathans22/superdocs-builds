@@ -7,15 +7,23 @@ Decisions are written to the narrative's sidecar metadata before any generation.
 
 from __future__ import annotations
 
+import base64
 import json
+import logging
 import re
+import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from .manifest import load_deck_manifest, project_root
 from .narrative import parse_script_sections
+
+logger = logging.getLogger(__name__)
+
+# Caption SuperDocs is asked to place with a generated figure — also the land marker.
+PRESENTER_VISUAL_MARKER = "Presenter visual (not a slide)"
 
 # Generic / unfilled bodies are not visualizable — do not invent a figure for them.
 _PLACEHOLDER_RE = re.compile(
@@ -327,3 +335,189 @@ def decide_all_verticals(
             continue
         results.append(decide_and_record(path, vertical=parts[2], manifest=manifest))
     return results
+
+
+class ImageChatClient(Protocol):
+    """Minimal chat surface used for image insertion (real SuperDocsClient or a test double)."""
+
+    async def chat(
+        self,
+        message: str,
+        session_id: str,
+        **kwargs: Any,
+    ) -> dict | list[dict]: ...
+
+
+def section_has_supporting_visual(body: str) -> bool:
+    """True if the section already contains an inserted supporting image/caption."""
+    text = (body or "").lower()
+    return (
+        PRESENTER_VISUAL_MARKER.lower() in text
+        or "<img" in text
+        or "![" in (body or "")
+    )
+
+
+def build_image_instruction(decision: ImageDecision) -> str:
+    """Chat instruction: generate one figure in this section only, never a slide layout."""
+    n = decision.section_number
+    title = decision.title
+    return f"""
+This document is a SPEAKING SCRIPT — not a slide deck. Do not create a slide
+layout, slide canvas, or anything confusable with a presentation file.
+
+In slide-equivalent {n} — {title} ONLY:
+- Generate one supporting image that clarifies this reason: {decision.reason}
+- Insert the image in that section, after the talking point and before the
+  speaker notes (or at the end of the section if those labels are missing).
+- Directly under the image, add a one-line caption starting with:
+  {PRESENTER_VISUAL_MARKER}:
+  followed by a short description of what the presenter should point at.
+- Do not change the talking point or speaker notes wording.
+- Do not add images to any other section.
+- Do not add bullet-slide layouts, large title cards, or deck chrome.
+
+Decision already recorded in metadata: warranted=yes for this section.
+""".strip()
+
+
+def plan_from_metadata(payload: dict[str, Any]) -> NarrativeImagePlan:
+    """Rebuild a plan from sidecar JSON — generation must follow recorded decisions."""
+    sections = [
+        ImageDecision(
+            section_number=int(row["section_number"]),
+            title=str(row["title"]),
+            image_eligible=bool(row["image_eligible"]),
+            warranted=bool(row["warranted"]),
+            reason=str(row["reason"]),
+        )
+        for row in payload.get("sections") or []
+    ]
+    return NarrativeImagePlan(
+        vertical=str(payload.get("vertical") or ""),
+        source_path=str(payload.get("source_path") or ""),
+        manifest_version=int(payload.get("manifest_version") or 1),
+        decided_at=str(payload.get("decided_at") or ""),
+        sections=sections,
+    )
+
+
+async def generate_images_from_plan(
+    client: ImageChatClient,
+    session_id: str,
+    plan: NarrativeImagePlan,
+    *,
+    metadata_path: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Generate a supporting image only where the recorded decision is warranted=yes.
+
+    Refuses to run if metadata was not written first (the card: decide, record, then generate).
+    Sections with warranted=false are skipped — no chat call.
+    """
+    if metadata_path is not None and not Path(metadata_path).is_file():
+        raise FileNotFoundError(
+            f"narrative metadata missing at {metadata_path}. "
+            "Fix: call decide_and_record before generating any image."
+        )
+    results: list[dict[str, Any]] = []
+    for decision in plan.sections:
+        if not decision.warranted:
+            logger.info(
+                "skip image for %s section %s: %s",
+                plan.vertical,
+                decision.section_number,
+                decision.reason,
+            )
+            results.append(
+                {
+                    "vertical": plan.vertical,
+                    "section_number": decision.section_number,
+                    "title": decision.title,
+                    "warranted": False,
+                    "generated": False,
+                    "skipped": True,
+                    "reason": decision.reason,
+                    "response": None,
+                }
+            )
+            continue
+        message = build_image_instruction(decision)
+        response = await client.chat(
+            message,
+            session_id,
+            section_numbers=[decision.section_number],
+            max_batch=1,
+            response_mode="compact",
+        )
+        results.append(
+            {
+                "vertical": plan.vertical,
+                "section_number": decision.section_number,
+                "title": decision.title,
+                "warranted": True,
+                "generated": True,
+                "skipped": False,
+                "reason": decision.reason,
+                "response": response,
+            }
+        )
+    return results
+
+
+async def generate_images_for_markdown(
+    markdown_path: Path,
+    *,
+    vertical: str | None = None,
+    client: Any | None = None,
+    session_id: str | None = None,
+    out_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Decide+record metadata, upload the script, generate only where warranted=yes.
+
+    Export is 0 ops. Operation charging is a separate step.
+    """
+    from .mcp_client import SuperDocsClient
+    from .narrative import export_narrative_files
+
+    path = Path(markdown_path)
+    plan, meta_path = decide_and_record(path, vertical=vertical)
+    sid = session_id or f"pitch-images-{plan.vertical}-{uuid.uuid4().hex[:8]}"
+    owns_client = client is None
+    if owns_client:
+        client = SuperDocsClient()
+        await client.connect()
+    assert client is not None
+    try:
+        raw = path.read_bytes()
+        await client.upload(
+            filename=path.name,
+            file_base64=base64.b64encode(raw).decode("ascii"),
+            session_id=sid,
+            return_html=False,
+        )
+        results = await generate_images_from_plan(
+            client,
+            sid,
+            plan,
+            metadata_path=meta_path,
+        )
+        dest = out_dir or path.parent
+        paths = await export_narrative_files(
+            client,
+            sid,
+            plan.vertical,
+            out_dir=dest,
+        )
+        # Keep metadata beside the (possibly overwritten) export.
+        write_narrative_metadata(paths["markdown"], plan)
+        return {
+            "vertical": plan.vertical,
+            "session_id": sid,
+            "metadata_path": str(meta_path),
+            "plan": plan.to_json_dict(),
+            "image_results": results,
+            "paths": {k: str(v) for k, v in paths.items()},
+        }
+    finally:
+        if owns_client:
+            await client.close()
