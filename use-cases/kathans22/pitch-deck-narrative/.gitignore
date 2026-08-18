@@ -3,9 +3,11 @@
 .env.local
 *.pem
 
-# Generated / runtime
-out/
-state/
+# Generated / runtime (keep directory placeholders)
+out/*
+!out/.gitkeep
+state/*
+!state/.gitkeep
 __pycache__/
 *.py[cod]
 *$py.class
