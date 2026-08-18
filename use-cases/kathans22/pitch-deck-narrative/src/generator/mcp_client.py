@@ -45,9 +45,50 @@ _TRANSPORT_ERRORS = (
 _TRANSPORT_RETRY_ATTEMPTS = 3
 _TRANSPORT_RETRY_BACKOFF_SECONDS = 2.0
 
+# Live API lesson from Build 1: 4-section batches can silently no-op; 2 lands.
+# Cap is config (env), never a magic number buried in call sites.
+_DEFAULT_CHAT_BATCH_CAP = 2
+_CHAT_BATCH_CAP_ENV = "SUPERDOCS_CHAT_BATCH_CAP"
+
 
 class SuperDocsClientError(RuntimeError):
     """Raised with the cause and the fix, never just a status code."""
+
+
+def chat_batch_cap(default: int = _DEFAULT_CHAT_BATCH_CAP) -> int:
+    """Return the configured chat section-batch cap (env SUPERDOCS_CHAT_BATCH_CAP)."""
+    raw = os.environ.get(_CHAT_BATCH_CAP_ENV)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise SuperDocsClientError(
+            f"{_CHAT_BATCH_CAP_ENV}={raw!r} is not an integer. Fix: set it to a "
+            f"positive integer (default {default})."
+        ) from exc
+    if value < 1:
+        raise SuperDocsClientError(
+            f"{_CHAT_BATCH_CAP_ENV}={value} must be >= 1. Fix: use 2 (recommended) "
+            "or another positive integer."
+        )
+    return value
+
+
+def chunk_section_numbers(
+    section_numbers: list[int],
+    max_batch: int | None = None,
+) -> list[list[int]]:
+    """Split section numbers into sequential batches of at most ``max_batch``."""
+    cap = chat_batch_cap() if max_batch is None else max_batch
+    if cap < 1:
+        raise SuperDocsClientError(
+            f"max_batch={cap} must be >= 1. Fix: pass a positive integer."
+        )
+    numbers = [int(n) for n in section_numbers]
+    if not numbers:
+        return []
+    return [numbers[i : i + cap] for i in range(0, len(numbers), cap)]
 
 
 def _api_key() -> str:
@@ -199,9 +240,65 @@ class SuperDocsClient:
         document_html: str | None = None,
         approval_mode: str | None = None,
         response_mode: str | None = None,
+        section_numbers: list[int] | None = None,
+        max_batch: int | None = None,
+        **extra,
+    ) -> dict | list[dict]:
+        """Send a chat instruction; auto-split when ``section_numbers`` exceed the batch cap.
+
+        If ``section_numbers`` is provided and longer than ``max_batch`` (default from
+        ``SUPERDOCS_CHAT_BATCH_CAP``, else 2), the request is split into sequential
+        chat calls of at most ``max_batch`` sections each. Returns a list of responses
+        in that case; otherwise a single response dict.
+
+        Build 1 proved 4-section batches can silently no-op on the live API; 2 lands.
+        """
+        if section_numbers is not None and len(section_numbers) > 0:
+            batches = chunk_section_numbers(section_numbers, max_batch=max_batch)
+            if len(batches) > 1:
+                responses: list[dict] = []
+                for batch in batches:
+                    batch_message = (
+                        f"{message}\n\n"
+                        f"Only edit slide-equivalent sections {batch}. "
+                        "Do not modify any other sections."
+                    )
+                    responses.append(
+                        await self._chat_once(
+                            batch_message,
+                            session_id,
+                            document_html=document_html,
+                            approval_mode=approval_mode,
+                            response_mode=response_mode,
+                            **extra,
+                        )
+                    )
+                return responses
+            if len(batches) == 1:
+                message = (
+                    f"{message}\n\n"
+                    f"Only edit slide-equivalent sections {batches[0]}. "
+                    "Do not modify any other sections."
+                )
+
+        return await self._chat_once(
+            message,
+            session_id,
+            document_html=document_html,
+            approval_mode=approval_mode,
+            response_mode=response_mode,
+            **extra,
+        )
+
+    async def _chat_once(
+        self,
+        message: str,
+        session_id: str,
+        document_html: str | None = None,
+        approval_mode: str | None = None,
+        response_mode: str | None = None,
         **extra,
     ) -> dict:
-        """Send a synchronous chat instruction to edit, draft, or restructure a document."""
         arguments: dict = {"message": message, "session_id": session_id, **extra}
         if document_html is not None:
             arguments["document_html"] = document_html
