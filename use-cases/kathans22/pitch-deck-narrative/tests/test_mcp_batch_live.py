@@ -16,18 +16,16 @@ import pytest
 from generator.mcp_client import SuperDocsClient, landed_check, normalise_section_text
 
 PROJECT = Path(__file__).resolve().parents[1]
-BUILD1_ENV = Path(
-    r"C:\Users\hp\Desktop\SuperDocs_Round2\Task_2\Task_2.1\superdocs-builds"
-    r"\use-cases\kathans22\policy-pack-localizer\.env"
-)
 
 
 def _load_api_key() -> str | None:
+    """Prefer the process env, then this project's local ``.env`` (never a machine path)."""
     key = os.environ.get("SUPERDOCS_API_KEY")
     if key and key.strip() and key.strip() != "your-key-here":
         return key.strip()
-    if BUILD1_ENV.is_file():
-        for line in BUILD1_ENV.read_text(encoding="utf-8").splitlines():
+    env_path = PROJECT / ".env"
+    if env_path.is_file():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
             if line.startswith("SUPERDOCS_API_KEY="):
                 value = line.split("=", 1)[1].strip().strip('"').strip("'")
                 if value and value != "your-key-here":
