@@ -2,8 +2,7 @@
 .env
 .env.local
 *.pem
-.cursor/rules/*
-.cursor/mcp.json
+.cursor/
 
 # Generated / runtime (keep directory placeholders)
 out/*
