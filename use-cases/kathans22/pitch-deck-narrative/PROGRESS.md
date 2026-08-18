@@ -183,6 +183,22 @@ Do **not** loosen thresholds to pass weak packs — fix YAML / narratives instea
 
 ---
 
+## Session 2 — Phase 5 / Prompt 16 (Image eligibility + generate-where-yes)
+
+- `17dd133` feat(imagegen): decide per-section whether an image is warranted
+- `a19a66a` feat(imagegen): generate the image only where the decision is yes
+- `217e226` feat(imagegen): charge or flag-as-uncertain the operation cost
+- (this) docs: record the eligibility decisions across all four verticals
+- Check: `tests/test_imagegen.py` — **10 passed** (no SuperDocs).
+- Eligible cells: 8 (4 verticals × sections 6 and 8). **Warranted yes: 4** (fintech 6+8, healthcare 8, edtech 8). **Honest no: 4** (legal 6+8, healthcare 6, edtech 6).
+- Billing: confirmed chat op, not a separate SKU (`IMAGE_GENERATION_BILLING_CERTAIN = True`).
+- Live SuperDocs insert **not run this session** — no API key in the environment. Metadata sidecars recorded first as required.
+- Legal still has 0 warranted images (filler Proof + qualitative ROI). Do not force; rework substance before the demo ≥1-per-vertical bar can include legal.
+
+**Evidence:** `evidence/image-eligibility.md` + `.json`; sidecars `evidence/narratives/pitch-script-*.meta.json`.
+
+---
+
 ## Handoff for the next chat session
 
 **Branch:** `kathans22/pitch-deck-narrative` (pushed; work only under `use-cases/kathans22/pitch-deck-narrative/`).
@@ -202,11 +218,13 @@ Idempotent: re-run of a finished vertical for the current manifest version → l
 
 **Known defects to carry forward (do not rediscover):**
 1. **edtech §7** — export heading is not `## Slide-equivalent 7 — Objection Handling`; scorer treats Objection as empty for edtech pairs. Rework heading or regenerate that section before trusting Objection cells.
-2. **BUG-001 class** — leftover `PLACEHOLDER_*` lines under some filled sections (see `evidence/bugs/BUG-001-placeholder-leftovers.md`). Landed-check was tightened; quality still uneven on older legal export.
-3. **Ops budgeting** — plan **~8–12 ops/vertical** with retries on, not CLAUDE’s happy-path 5. Four verticals cost **39** this run.
+2. **BUG-001 class** — leftover `PLACEHOLDER_*` lines under some filled sections (see `evidence/bugs/BUG-001-placeholder-leftovers.md`). Landed-check was tightened; quality still uneven on older legal export. This also zeros legal (and some Proof) **image** eligibility until those sections have real substance.
+3. **Ops budgeting** — plan **~8–12 ops/vertical** with retries on, not CLAUDE’s happy-path 5. Four verticals cost **39** this run. Image inserts: **1 chat op each** where warranted (~4 more when the live pass runs).
+4. **Legal images** — Prompt 16 decided **no** on both eligible sections. Demo still needs ≥1 image per vertical after legal Proof/ROI are real.
 
 **Evidence already committed (prefer these over gitignored `out/` / `state/`):**
-- `evidence/narratives/` — four speaking scripts
+- `evidence/narratives/` — four speaking scripts + `.meta.json` image decisions
+- `evidence/image-eligibility.md` / `image-eligibility.json`
 - `evidence/divergence-report.json` / `divergence-results.md`
 - `evidence/ledger-four-verticals.json` / `ops-reconciliation.md`
 - `evidence/bugs/` — SuperDocs surprises
