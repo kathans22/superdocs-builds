@@ -125,6 +125,34 @@ The Build 2 bar is not “looks fine on a skim.” Two claims are enforced in co
 
 Template-and-swap (“replace legal with fintech”) fails the second gate the same way identical protected cores would fail Build 1’s core-hash. A prose claim in the README is not a substitute for either mechanism.
 
+## Fixed decisions (and why)
+
+Logged in the working agreement; not revisited mid-build:
+
+| Decision | Reasoning |
+|---|---|
+| Product is invented **ClarityDocs**, held constant | Isolates the pitch as the variable. If the product changes per vertical, divergence becomes product noise, not vertical substance. |
+| Nine slide-equivalent sections with `shared` / `vertical` weights | Makes expected variance measurable. Shared = Opening, Product Overview, CTA. Vertical = Problem, Why Now, Solution Fit, Proof, Objection, ROI. |
+| Verticals from YAML knowledge files, not a skeleton with blanks | Buyer, regulatory trigger, document pain, objection, proof, and terminology are named data. Adding a vertical is a new YAML — zero code. |
+| Chat batch cap **2** (configurable) | Live SuperDocs behavior: oversized batches have been observed to no-op; 2-section batches land reliably. Fixed from Phase 2, not rediscovered each run. |
+| Landed-check before approval + split-retry | A response that names sections but changes none is not success. Failed sections retry alone. |
+| Format guard on every export | “Not a slide deck” is an assertion, not a reminder in the prompt. |
+| Images only if `image_eligible` **and** warranted | Never force a figure onto every eligible section; never skip every section by policy. Demo target: ≥1 image per vertical. |
+| Divergence scored to JSON | Pairwise lexical overlap is the numeric counterpart of “read two verticals side by side.” |
+
+## Honest limitations
+
+**Where the divergence scorer can be gamed.** Word Jaccard rewards surface token difference. A generator could pass by synonym-swapping or padding with unique boilerplate while keeping the same argument structure. It can also fail a good rewrite that reuses many product-capability phrases (ClarityDocs is held constant). Shared sections are deliberately ungated for that reason; vertical sections still need a human side-by-side read when scores sit near the threshold. The scorer is a cheap filter for template-and-swap, not a semantic entailment model.
+
+**What a fifth vertical needs.** One new file under `config/verticals/<code>.yaml` with the same required fields (buyer role, regulatory trigger, document pain, typical objection, proof point, terminology) that is not a noun-swap of an existing pack. Then: generate (`python -m generator run --vertical <code>`), re-score (`python -m generator score --from evidence/narratives`), and expect the new pairs to stay under the vertical gates. No generator code change. Ops: plan ~8–12 charged chat ops with retries, not the happy-path five.
+
+**What the image-eligibility heuristic gets wrong.** It keys off digits, spelled counts, comparison/time language, and process words in Proof/ROI bodies. That:
+
+- Misses a strong qualitative Proof story that would still help a presenter (no counts → `warranted=false`).
+- Can warrant a figure for thin numeric name-dropping that is not actually chartable.
+- Treats leftover placeholders / generic filler as unwarranted (correct intent) but earlier exports with `PLACEHOLDER_*` lines zeroed legal images until those sections were rewritten.
+- Relies on SuperDocs chat for the actual bitmap; the API has appended extra generic sections / `placeholder.com` stubs (BUG-002) that had to be stripped by hand. Signed GCS URLs expire (~24h); this repo mirrors figures under `evidence/narratives/presenter-visuals/`.
+
 ## License
 
 MIT
