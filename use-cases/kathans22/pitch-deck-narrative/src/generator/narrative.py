@@ -9,12 +9,14 @@ import base64
 import html
 import logging
 import re
+import time
 import uuid
 from pathlib import Path
 from typing import Any
 
 import httpx2
 
+from .ledger import Ledger, ops_from_response, parse_ops_ceiling
 from .manifest import load_deck_manifest, load_product, load_validated, project_root
 from .mcp_client import (
     SuperDocsClient,
@@ -221,6 +223,9 @@ async def fill_narrative_sections(
     vertical: dict[str, Any],
     manifest: dict[str, Any],
     pre_edit: dict[int, str],
+    *,
+    vertical_code: str,
+    ledger: Ledger | None = None,
 ) -> dict[str, Any]:
     """Batched chat fill (config batch cap) with landed-check and split-retry."""
     sections = list(manifest.get("sections") or [])
@@ -228,6 +233,7 @@ async def fill_narrative_sections(
     by_number = {int(s["number"]): s for s in sections}
     batches = chunk_section_numbers(numbers, max_batch=chat_batch_cap())
     responses: list[dict] = []
+    ceiling = parse_ops_ceiling()
 
     async def fetch_post(sid: str) -> dict[int, str]:
         md = await _export_markdown_text(client, sid)
@@ -236,6 +242,7 @@ async def fill_narrative_sections(
     for batch in batches:
         batch_sections = [by_number[n] for n in batch]
         instruction = build_batch_instruction(product, vertical, batch_sections)
+        started = time.monotonic()
         result = await client.chat_with_landed_check(
             message=instruction,
             session_id=session_id,
@@ -245,13 +252,30 @@ async def fill_narrative_sections(
             max_batch=len(batch),
             response_mode="compact",
         )
-        responses.extend(result.get("responses") or [])
+        elapsed = time.monotonic() - started
+        batch_responses = result.get("responses") or []
+        responses.extend(batch_responses)
+        ops = sum(ops_from_response(r) if isinstance(r, dict) else 0 for r in batch_responses)
+        if ops == 0 and batch_responses:
+            # Compact apply path may omit usage; charge 1 per chat call in the batch.
+            ops = len(batch_responses)
+        if ledger is not None:
+            ledger.record(
+                step="chat",
+                vertical=f"{vertical_code} sections {batch}",
+                chat_calls=ops,
+                wall_time=elapsed,
+                content_key=f"narrative:{vertical_code}:batch:{batch}:v{manifest.get('manifest_version', 1)}",
+                output_exists=False,
+            )
+            ledger.enforce_ceiling(ceiling)
         logger.info(
-            "batch %s ready_to_approve=%s landed=%s failed=%s",
+            "batch %s ready_to_approve=%s landed=%s failed=%s ops=%s",
             batch,
             result.get("ready_to_approve"),
             result.get("landed"),
             result.get("failed"),
+            ops,
         )
 
     for response in responses:
@@ -286,6 +310,7 @@ async def generate_narrative(
     client: SuperDocsClient | None = None,
     session_id: str | None = None,
     out_dir: Path | None = None,
+    ledger: Ledger | None = None,
 ) -> dict[str, Any]:
     """Upload skeleton, fill from vertical knowledge, landed-check, export md+docx."""
     bundle = load_validated()
@@ -307,6 +332,8 @@ async def generate_narrative(
     pre_edit = skeleton_pre_edit_bodies(manifest)
     sid = session_id or f"pitch-script-{vertical_code}-{uuid.uuid4().hex[:8]}"
     file_b64 = base64.b64encode(skeleton.encode("utf-8")).decode("ascii")
+    if ledger is None:
+        ledger = Ledger()
 
     owns_client = client is None
     if owns_client:
@@ -314,15 +341,33 @@ async def generate_narrative(
         await client.connect()
     assert client is not None
     try:
+        started = time.monotonic()
         await client.upload(
             filename=f"pitch-script-{vertical_code}-skeleton.html",
             file_base64=file_b64,
             session_id=sid,
             return_html=False,
         )
-        fill = await fill_narrative_sections(
-            client, sid, product, vertical, manifest, pre_edit
+        ledger.record(
+            step="upload",
+            vertical=vertical_code,
+            chat_calls=0,
+            wall_time=time.monotonic() - started,
+            content_key=f"narrative:{vertical_code}:upload:v{manifest.get('manifest_version', 1)}",
+            output_exists=False,
         )
+
+        fill = await fill_narrative_sections(
+            client,
+            sid,
+            product,
+            vertical,
+            manifest,
+            pre_edit,
+            vertical_code=vertical_code,
+            ledger=ledger,
+        )
+        started = time.monotonic()
         paths = await export_narrative_files(
             client,
             sid,
@@ -330,6 +375,16 @@ async def generate_narrative(
             product_name=product_name,
             out_dir=out_dir,
         )
+        ledger.record(
+            step="export",
+            vertical=vertical_code,
+            chat_calls=0,
+            wall_time=time.monotonic() - started,
+            content_key=f"narrative:{vertical_code}:export:v{manifest.get('manifest_version', 1)}",
+            output_exists=False,
+        )
+        ledger.save()
+        ledger.report()
         markdown = paths["markdown"].read_text(encoding="utf-8")
         return {
             "vertical": vertical_code,
@@ -340,6 +395,7 @@ async def generate_narrative(
             "failed": fill["failed"],
             "ready": fill["ready"],
             "responses": fill["responses"],
+            "ops_total": ledger.total_operations,
         }
     finally:
         if owns_client:
