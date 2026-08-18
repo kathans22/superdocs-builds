@@ -173,3 +173,41 @@ def test_generate_refuses_without_metadata_file(tmp_path: Path) -> None:
         raise AssertionError("expected FileNotFoundError")
     except FileNotFoundError as exc:
         assert "metadata missing" in str(exc)
+
+
+def test_image_ops_charged_only_when_generated() -> None:
+    import asyncio
+
+    from generator.imagegen import (
+        IMAGE_GENERATION_BILLING,
+        IMAGE_GENERATION_BILLING_CERTAIN,
+        ImageDecision,
+        NarrativeImagePlan,
+        generate_images_from_plan,
+    )
+    from generator.ledger import Ledger
+
+    class FakeClient:
+        async def chat(self, message: str, session_id: str, **kwargs):
+            return {"usage": {"was_billable": True, "ops_charged": 1}}
+
+    plan = NarrativeImagePlan(
+        vertical="healthcare",
+        source_path="h.md",
+        manifest_version=1,
+        decided_at="t",
+        sections=[
+            ImageDecision(6, "Proof / Case Study", True, False, "filler"),
+            ImageDecision(8, "ROI / Business Case", True, True, "chartable"),
+        ],
+    )
+    ledger = Ledger()
+    results = asyncio.run(
+        generate_images_from_plan(FakeClient(), "s", plan, ledger=ledger)
+    )
+    assert IMAGE_GENERATION_BILLING == "chat_operation"
+    assert IMAGE_GENERATION_BILLING_CERTAIN is True
+    by_n = {row["section_number"]: row for row in results}
+    assert by_n[6]["ops_charged"] == 0 and by_n[6]["ledger_status"] == "SKIPPED"
+    assert by_n[8]["ops_charged"] == 1 and by_n[8]["billing_certain"] is True
+    assert ledger.total_operations == 1

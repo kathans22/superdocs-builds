@@ -11,14 +11,33 @@ import base64
 import json
 import logging
 import re
+import time
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
+from .ledger import Ledger, ops_from_response, parse_ops_ceiling
 from .manifest import load_deck_manifest, project_root
 from .narrative import parse_script_sections
+
+logger = logging.getLogger(__name__)
+
+# Caption SuperDocs is asked to place with a generated figure — also the land marker.
+PRESENTER_VISUAL_MARKER = "Presenter visual (not a slide)"
+
+# Phase 2 / Prompt 7 live docs (docs/image-generation-billing.md): image generation
+# is not a separate SKU. It rides a document-edit `chat` operation.
+IMAGE_GENERATION_BILLING = "chat_operation"
+IMAGE_GENERATION_BILLING_CERTAIN = True
+IMAGE_GENERATION_BILLING_NOTE = (
+    "AI image generation is billed as a normal document-edit chat operation "
+    "(typically 1 op; not a distinct image SKU). Upload, export, and a skipped "
+    "unwarranted section are 0 ops. Source: docs/image-generation-billing.md "
+    "checked 18 August 2026 against Plans & Usage, Attachments, and the "
+    "agent-editing playbook."
+)
 
 logger = logging.getLogger(__name__)
 
@@ -337,7 +356,88 @@ def decide_all_verticals(
     return results
 
 
-class ImageChatClient(Protocol):
+def _ops_for_image_response(response: dict | list[dict] | None) -> tuple[int, str]:
+    """Return (ops, how we knew). Billing is a chat op — confirmed, not guessed."""
+    if response is None:
+        return 0, "no_response"
+    payloads = response if isinstance(response, list) else [response]
+    total = 0
+    saw_usage = False
+    for item in payloads:
+        if not isinstance(item, dict):
+            continue
+        usage = item.get("usage")
+        if usage is not None:
+            saw_usage = True
+        total += ops_from_response(item) if isinstance(item, dict) else 0
+    if saw_usage:
+        return total, "usage.was_billable"
+    # Compact chat can omit usage the same way narrative fill does; one generate
+    # chat that applied a change is one op per Phase 2 billing note.
+    return max(total, 1 if payloads else 0), "chat_op_fallback_usage_omitted"
+
+
+def charge_image_operations(
+    ledger: Ledger,
+    results: list[dict[str, Any]],
+    *,
+    manifest_version: int = 1,
+) -> list[dict[str, Any]]:
+    """Charge the ledger for generated images; skip-charge unwarranted sections.
+
+    Billing certainty: IMAGE_GENERATION_BILLING_CERTAIN is True — this is a chat
+    operation, not an unknown surcharge.
+    """
+    ceiling = parse_ops_ceiling()
+    charged: list[dict[str, Any]] = []
+    for row in results:
+        vertical = str(row.get("vertical") or "")
+        number = int(row["section_number"])
+        key = f"image:{vertical}:section:{number}:v{manifest_version}"
+        if row.get("skipped") or not row.get("generated"):
+            entry = ledger.record(
+                step="image",
+                vertical=f"{vertical} section {number} skipped",
+                chat_calls=0,
+                wall_time=0.0,
+                content_key=key,
+                output_exists=False,
+            )
+            # Force skip semantics: unwarranted means we never called SuperDocs.
+            entry.status = "SKIPPED"
+            entry.operations = 0
+            updated = {
+                **row,
+                "ops_charged": 0,
+                "billing": IMAGE_GENERATION_BILLING,
+                "billing_certain": IMAGE_GENERATION_BILLING_CERTAIN,
+                "billing_note": IMAGE_GENERATION_BILLING_NOTE,
+                "ledger_status": "SKIPPED",
+            }
+            charged.append(updated)
+            continue
+        ops, how = _ops_for_image_response(row.get("response"))
+        entry = ledger.record(
+            step="image",
+            vertical=f"{vertical} section {number}",
+            chat_calls=ops,
+            wall_time=float(row.get("wall_time") or 0.0),
+            content_key=key,
+            output_exists=False,
+        )
+        ledger.enforce_ceiling(ceiling)
+        charged.append(
+            {
+                **row,
+                "ops_charged": entry.operations,
+                "ops_source": how,
+                "billing": IMAGE_GENERATION_BILLING,
+                "billing_certain": IMAGE_GENERATION_BILLING_CERTAIN,
+                "billing_note": IMAGE_GENERATION_BILLING_NOTE,
+                "ledger_status": entry.status,
+            }
+        )
+    return charged
     """Minimal chat surface used for image insertion (real SuperDocsClient or a test double)."""
 
     async def chat(
@@ -408,6 +508,7 @@ async def generate_images_from_plan(
     plan: NarrativeImagePlan,
     *,
     metadata_path: Path | None = None,
+    ledger: Ledger | None = None,
 ) -> list[dict[str, Any]]:
     """Generate a supporting image only where the recorded decision is warranted=yes.
 
@@ -438,10 +539,12 @@ async def generate_images_from_plan(
                     "skipped": True,
                     "reason": decision.reason,
                     "response": None,
+                    "wall_time": 0.0,
                 }
             )
             continue
         message = build_image_instruction(decision)
+        started = time.monotonic()
         response = await client.chat(
             message,
             session_id,
@@ -449,6 +552,7 @@ async def generate_images_from_plan(
             max_batch=1,
             response_mode="compact",
         )
+        elapsed = time.monotonic() - started
         results.append(
             {
                 "vertical": plan.vertical,
@@ -459,7 +563,14 @@ async def generate_images_from_plan(
                 "skipped": False,
                 "reason": decision.reason,
                 "response": response,
+                "wall_time": elapsed,
             }
+        )
+    if ledger is not None:
+        return charge_image_operations(
+            ledger,
+            results,
+            manifest_version=plan.manifest_version,
         )
     return results
 
@@ -471,6 +582,7 @@ async def generate_images_for_markdown(
     client: Any | None = None,
     session_id: str | None = None,
     out_dir: Path | None = None,
+    ledger: Ledger | None = None,
 ) -> dict[str, Any]:
     """Decide+record metadata, upload the script, generate only where warranted=yes.
 
@@ -500,6 +612,7 @@ async def generate_images_for_markdown(
             sid,
             plan,
             metadata_path=meta_path,
+            ledger=ledger,
         )
         dest = out_dir or path.parent
         paths = await export_narrative_files(
