@@ -114,6 +114,17 @@ Full pair×section matrix: open the Divergence screen (`ui/`, `#/divergence`) or
 
 Export, download, format guard, and divergence scoring are **0** ops. Actual generation ran ~2× the happy-path floor because landed-check split-retries billed extra chat calls. Still well inside the 10,000-op budget. See `evidence/ops-reconciliation.md`.
 
+## Two hard constraints → enforcing mechanisms
+
+The Build 2 bar is not “looks fine on a skim.” Two claims are enforced in code so a reviewer can fail the build without arguing about taste.
+
+| Hard constraint | Mechanism | Where |
+|---|---|---|
+| **Not a slide deck** — export must never be confusable with a presentation file | Structural assertion: filename/title must not carry deck/slide signatures; the speaking-script disclaimer line must be present; failed exports are deleted and raise `FormatGuardError` naming the check | `src/generator/format_guard.py`, wired into every narrative export |
+| **Substance, not vocabulary** — verticals must differ in pitch content, not just industry nouns | Pairwise **word Jaccard** overlap per section across every vertical pair; vertical-tagged sections must keep mean overlap **&lt; 0.40** and no cell **≥ 0.55**; shared sections may overlap more (product is held constant) and are reported only | `src/generator/divergence.py` → `evidence/divergence-report.json`; UI Divergence screen |
+
+Template-and-swap (“replace legal with fintech”) fails the second gate the same way identical protected cores would fail Build 1’s core-hash. A prose claim in the README is not a substitute for either mechanism.
+
 ## License
 
 MIT
