@@ -159,3 +159,9 @@ Do **not** loosen thresholds to pass weak packs — fix YAML / narratives instea
 - docs commit: divergence results + rework notes
 - Four-vertical report: mean vertical **0.115** (&lt; 0.40), mean shared **0.186**, **PASS**, no hot vertical cells (≥ 0.55).
 - Rework: edtech section 7 heading drifted off `Slide-equivalent 7 — …` — unscored (0.0 cells); fix heading before trusting Objection for edtech pairs.
+
+## Session 1 continued — Phase 4 / Prompt 15 (Ledger total)
+
+- `a74b7d9` chore(evidence): commit the full four-vertical ledger
+- docs: reconcile actual ops vs CLAUDE.md (~20 estimated → **39** actual)
+- Cause: landed-check split-retries (and multi-billable calls per batch); not regenerations. Non-chat steps remain 0 ops.
