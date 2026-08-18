@@ -242,3 +242,71 @@ async def run_vertical(
 
 # Alias matching the module docstring / source-of-truth naming.
 run = run_vertical
+
+
+def list_verticals() -> dict[str, Any]:
+    """Known verticals from config — adding a YAML is enough; no code change."""
+    bundle = load_validated()
+    codes = sorted(bundle["verticals"].keys())
+    return {
+        "verticals": codes,
+        "manifest_version": manifest_version(bundle),
+        "product": _product_name(bundle),
+    }
+
+
+def narrative_export_path(
+    vertical_code: str,
+    fmt: str = "markdown",
+    *,
+    out_dir: Path | None = None,
+) -> Path:
+    """Path to an exported speaking-script file (out/, then evidence/narratives)."""
+    bundle = load_validated()
+    if vertical_code not in bundle["verticals"]:
+        raise KeyError(
+            f"unknown vertical {vertical_code!r}; known: {sorted(bundle['verticals'])}"
+        )
+    fmt_n = fmt.lower()
+    if fmt_n not in {"markdown", "md", "docx"}:
+        raise ValueError(f"unsupported narrative format {fmt!r}; use markdown or docx")
+    fmt_key = "markdown" if fmt_n in {"markdown", "md"} else "docx"
+    product_name = _product_name(bundle)
+    paths = export_paths(vertical_code, product_name=product_name, out_dir=out_dir)
+    candidate = paths[fmt_key]
+    if candidate.is_file() and candidate.stat().st_size > 0:
+        return candidate
+    evidence = EVIDENCE_DIR / "narratives" / candidate.name
+    if evidence.is_file() and evidence.stat().st_size > 0:
+        return evidence
+    raise FileNotFoundError(
+        f"no {fmt_key} export for vertical {vertical_code!r} at {candidate} "
+        f"or {evidence}. Fix: generate the vertical first."
+    )
+
+
+async def run_verticals(
+    vertical_code: str,
+    *,
+    out_dir: Path | None = None,
+    ledger: Ledger | None = None,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Generate one vertical, or every configured vertical when code is ``all``."""
+    bundle = load_validated()
+    codes = sorted(bundle["verticals"].keys())
+    if vertical_code != "all" and vertical_code not in bundle["verticals"]:
+        raise KeyError(
+            f"unknown vertical {vertical_code!r}; known: {codes} (or 'all')"
+        )
+    targets = codes if vertical_code == "all" else [vertical_code]
+    results = [
+        await run_vertical(code, out_dir=out_dir, ledger=ledger, force=force)
+        for code in targets
+    ]
+    return {
+        "requested": vertical_code,
+        "verticals": targets,
+        "results": results,
+        "ops_total": results[-1]["ops_total"] if results else 0,
+    }
