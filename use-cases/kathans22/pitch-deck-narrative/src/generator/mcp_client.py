@@ -567,7 +567,8 @@ def _changes_from_batch(batch: dict) -> list[dict]:
 
 def normalise_section_text(text: str) -> str:
     """Collapse whitespace for stable pre/post comparison."""
-    return " ".join((text or "").split()).strip().lower()
+    cleaned = (text or "").replace("\\_", "_").replace("\\*", "*")
+    return " ".join(cleaned.split()).strip().lower()
 
 
 def landed_check(
@@ -577,19 +578,19 @@ def landed_check(
 ) -> dict[str, list[int]]:
     """Compare each targeted section's post-edit text to its pre-edit text.
 
-    A targeted section *landed* only when post content exists and differs from pre
-    after normalisation. A success-shaped chat reply is not trusted on its own â
-    Build 1 observed "Successfully updated all 4 sections" while the document was
-    untouched.
-
-    Returns ``{"landed": [...], "failed": [...]}`` covering every targeted number.
+    A targeted section *landed* only when post content exists, differs from pre
+    after normalisation, and no PLACEHOLDER_* tokens remain.
     """
     landed: list[int] = []
     failed: list[int] = []
     for number in targeted:
         pre = normalise_section_text(pre_edit.get(number, ""))
         post = normalise_section_text(post_edit.get(number, ""))
-        if post and post != pre:
+        still_placeholder = (
+            f"placeholder_talking_point_{number}" in post
+            or f"placeholder_speaker_notes_{number}" in post
+        )
+        if post and post != pre and not still_placeholder:
             landed.append(number)
         else:
             failed.append(number)
