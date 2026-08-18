@@ -2,12 +2,14 @@
 
 Ported from Build 1's ledger, adapted to verticals (not countries).
 Charging follows CLAUDE.md: a chat call that applies a change is typically 1 op;
-export / download / divergence scoring are 0.
+export / download / divergence scoring are 0. Idempotent by content key so a
+vertical already generated for the current manifest version is not regenerated.
 """
 
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -54,26 +56,58 @@ class Ledger:
         chat_calls: int,
         wall_time: float,
         content_key: str | None = None,
-        status: str = "CHARGED",
+        output_exists: bool = True,
     ) -> LedgerEntry:
-        """Append a step. Commit 1: always records as charged/status given."""
-        entry = LedgerEntry(
-            step=step,
-            vertical=vertical,
-            operations=chat_calls if status == "CHARGED" else 0,
-            wall_time=wall_time,
-            status=status,
-            content_key=content_key,
-        )
+        """Record a step, or skip it if already charged and its output still exists.
+
+        Idempotency: when ``content_key`` was already CHARGED and ``output_exists``
+        is True, record SKIPPED with 0 operations rather than billing again.
+        """
+        if content_key is not None and output_exists and self.already_charged(content_key):
+            entry = LedgerEntry(
+                step=step,
+                vertical=vertical,
+                operations=0,
+                wall_time=wall_time,
+                status="SKIPPED",
+                content_key=content_key,
+            )
+        else:
+            entry = LedgerEntry(
+                step=step,
+                vertical=vertical,
+                operations=chat_calls,
+                wall_time=wall_time,
+                status="CHARGED",
+                content_key=content_key,
+            )
         self.entries.append(entry)
         return entry
+
+    def already_charged(self, content_key: str) -> bool:
+        """True if ``content_key`` was already billed (status CHARGED) in this ledger."""
+        return any(
+            e.content_key == content_key and e.status == "CHARGED" for e in self.entries
+        )
+
+    def enforce_ceiling(self, ceiling: int | None) -> None:
+        """Abort the run if operations charged so far exceed ``ceiling``.
+
+        Checked after each ``record()`` during a run — stop before more ops are spent.
+        """
+        if ceiling is not None and self.total_operations > ceiling:
+            raise OperationCeilingExceeded(
+                f"Operations charged ({self.total_operations}) exceeded the configured "
+                f"ceiling ({ceiling}). Fix: raise OPS_BUDGET_CAP / --ops-ceiling if this "
+                "run is expected to cost more, or stop and investigate overspend."
+            )
 
     @property
     def total_operations(self) -> int:
         return sum(e.operations for e in self.entries)
 
     def save(self, path: Path = LEDGER_PATH) -> Path:
-        """Persist entries to state/ so a resumed run can reload them."""
+        """Persist entries to state/ so a resumed run does not double-count."""
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             json.dumps([asdict(e) for e in self.entries], indent=2),
@@ -127,3 +161,34 @@ def _format_line(
         ops_text = f"SKIPPED ({ops_text})"
     pad = max(1, _LINE_WIDTH - len(label) - len(ops_text))
     return f"{label}{' ' * pad}{ops_text}"
+
+
+def apply_limit(items: list, limit: int | None) -> list:
+    """Small-sample mode: return only the first ``limit`` items, or all of them."""
+    if limit is None:
+        return list(items)
+    return list(items)[:limit]
+
+
+def parse_limit(argv: list[str]) -> int | None:
+    """Extract an integer ``--limit N`` (or ``--limit=N``) from a CLI argument list."""
+    for i, arg in enumerate(argv):
+        if arg == "--limit" and i + 1 < len(argv):
+            return int(argv[i + 1])
+        if arg.startswith("--limit="):
+            return int(arg.split("=", 1)[1])
+    return None
+
+
+def parse_ops_ceiling(argv: list[str] | None = None) -> int | None:
+    """Operation ceiling from ``--ops-ceiling`` or env ``OPS_BUDGET_CAP``."""
+    if argv:
+        for i, arg in enumerate(argv):
+            if arg == "--ops-ceiling" and i + 1 < len(argv):
+                return int(argv[i + 1])
+            if arg.startswith("--ops-ceiling="):
+                return int(arg.split("=", 1)[1])
+    raw = os.environ.get("OPS_BUDGET_CAP")
+    if raw is None or raw.strip() == "":
+        return None
+    return int(raw)
