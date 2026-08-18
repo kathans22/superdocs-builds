@@ -110,7 +110,9 @@ def build_batch_instruction(
 - Write one clear **Talking point** (one sentence the presenter says first).
 - Write **full speaker notes** (multiple paragraphs — this is the product; not bullets-only).
 - Replace PLACEHOLDER_TALKING_POINT_{number} and PLACEHOLDER_SPEAKER_NOTES_{number} completely.
+  Those placeholder strings must not appear anywhere in the finished section.
 - Do not invent a slide layout or anything confusable with a presentation file.
+- Do not leave a second leftover Speaker notes / Talking point block under the real one.
 """.strip()
         )
 
