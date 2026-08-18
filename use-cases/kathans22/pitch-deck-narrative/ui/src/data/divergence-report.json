@@ -1,0 +1,304 @@
+{
+  "status": "scored",
+  "manifest_version": 1,
+  "verticals": [
+    "edtech",
+    "fintech",
+    "healthcare",
+    "legal"
+  ],
+  "section_weights": {
+    "1": "shared",
+    "2": "vertical",
+    "3": "vertical",
+    "4": "shared",
+    "5": "vertical",
+    "6": "vertical",
+    "7": "vertical",
+    "8": "vertical",
+    "9": "shared"
+  },
+  "thresholds": {
+    "vertical_mean_max": 0.4,
+    "vertical_section_max": 0.55,
+    "shared_sections_gated": false
+  },
+  "report": {
+    "method": "word_jaccard",
+    "verticals": [
+      "edtech",
+      "fintech",
+      "healthcare",
+      "legal"
+    ],
+    "pairs": [
+      {
+        "vertical_a": "edtech",
+        "vertical_b": "fintech",
+        "sections": {
+          "1": 0.16230366492146597,
+          "2": 0.16862745098039217,
+          "3": 0.08333333333333333,
+          "4": 0.06198347107438017,
+          "5": 0.07692307692307693,
+          "6": 0.1206896551724138,
+          "7": 0.0,
+          "8": 0.1590909090909091,
+          "9": 0.1388888888888889
+        }
+      },
+      {
+        "vertical_a": "edtech",
+        "vertical_b": "healthcare",
+        "sections": {
+          "1": 0.2079207920792079,
+          "2": 0.14937759336099585,
+          "3": 0.0730593607305936,
+          "4": 0.0,
+          "5": 0.152,
+          "6": 0.1214574898785425,
+          "7": 0.0,
+          "8": 0.14847161572052403,
+          "9": 0.1495601173020528
+        }
+      },
+      {
+        "vertical_a": "edtech",
+        "vertical_b": "legal",
+        "sections": {
+          "1": 0.2774869109947644,
+          "2": 0.20703125,
+          "3": 0.02666666666666667,
+          "4": 0.0,
+          "5": 0.14925373134328357,
+          "6": 0.10784313725490197,
+          "7": 0.0,
+          "8": 0.12087912087912088,
+          "9": 0.16824196597353497
+        }
+      },
+      {
+        "vertical_a": "fintech",
+        "vertical_b": "healthcare",
+        "sections": {
+          "1": 0.16756756756756758,
+          "2": 0.1527777777777778,
+          "3": 0.18032786885245902,
+          "4": 0.03076923076923077,
+          "5": 0.1031390134529148,
+          "6": 0.10408921933085502,
+          "7": 0.2070063694267516,
+          "8": 0.16030534351145037,
+          "9": 0.2094017094017094
+        }
+      },
+      {
+        "vertical_a": "fintech",
+        "vertical_b": "legal",
+        "sections": {
+          "1": 0.2,
+          "2": 0.17083333333333334,
+          "3": 0.04838709677419355,
+          "4": 0.03076923076923077,
+          "5": 0.0783132530120482,
+          "6": 0.06493506493506493,
+          "7": 0.19661016949152543,
+          "8": 0.12903225806451613,
+          "9": 0.17551963048498845
+        }
+      },
+      {
+        "vertical_a": "healthcare",
+        "vertical_b": "legal",
+        "sections": {
+          "1": 0.21428571428571427,
+          "2": 0.13043478260869565,
+          "3": 0.036585365853658534,
+          "4": 1.0,
+          "5": 0.10434782608695652,
+          "6": 0.1271186440677966,
+          "7": 0.18545454545454546,
+          "8": 0.10964912280701754,
+          "9": 0.1615720524017467
+        }
+      }
+    ],
+    "aggregates": {
+      "mean_vertical_overlap": 0.11539031794934208,
+      "mean_shared_overlap": 0.1864594970508046,
+      "vertical_cells": 36,
+      "shared_cells": 18
+    },
+    "per_pair_aggregates": [
+      {
+        "vertical_a": "edtech",
+        "vertical_b": "fintech",
+        "mean_vertical_overlap": 0.10144407091668756,
+        "mean_shared_overlap": 0.12105867496157835
+      },
+      {
+        "vertical_a": "edtech",
+        "vertical_b": "healthcare",
+        "mean_vertical_overlap": 0.107394343281776,
+        "mean_shared_overlap": 0.1191603031270869
+      },
+      {
+        "vertical_a": "edtech",
+        "vertical_b": "legal",
+        "mean_vertical_overlap": 0.10194565102399551,
+        "mean_shared_overlap": 0.14857629232276645
+      },
+      {
+        "vertical_a": "fintech",
+        "vertical_b": "healthcare",
+        "mean_vertical_overlap": 0.15127426539203476,
+        "mean_shared_overlap": 0.13591283591283593
+      },
+      {
+        "vertical_a": "fintech",
+        "vertical_b": "legal",
+        "mean_vertical_overlap": 0.11468519593511359,
+        "mean_shared_overlap": 0.13542962041807308
+      },
+      {
+        "vertical_a": "healthcare",
+        "vertical_b": "legal",
+        "mean_vertical_overlap": 0.11559838114644505,
+        "mean_shared_overlap": 0.458619255562487
+      }
+    ],
+    "thresholds": {
+      "vertical_mean_max": 0.4,
+      "vertical_section_max": 0.55,
+      "shared_sections_gated": false
+    }
+  },
+  "evaluation": {
+    "passed": true,
+    "failures": [],
+    "hot_sections": [],
+    "mean_vertical_overlap": 0.11539031794934208,
+    "mean_shared_overlap": 0.1864594970508046,
+    "thresholds": {
+      "vertical_mean_max": 0.4,
+      "vertical_section_max": 0.55,
+      "shared_sections_gated": false
+    }
+  },
+  "highest_vertical_cells": [
+    {
+      "section": "2",
+      "vertical_a": "edtech",
+      "vertical_b": "legal",
+      "score": 0.20703125,
+      "at_or_above_section_max": false
+    },
+    {
+      "section": "7",
+      "vertical_a": "fintech",
+      "vertical_b": "healthcare",
+      "score": 0.2070063694267516,
+      "at_or_above_section_max": false
+    },
+    {
+      "section": "7",
+      "vertical_a": "fintech",
+      "vertical_b": "legal",
+      "score": 0.19661016949152543,
+      "at_or_above_section_max": false
+    },
+    {
+      "section": "7",
+      "vertical_a": "healthcare",
+      "vertical_b": "legal",
+      "score": 0.18545454545454546,
+      "at_or_above_section_max": false
+    },
+    {
+      "section": "3",
+      "vertical_a": "fintech",
+      "vertical_b": "healthcare",
+      "score": 0.18032786885245902,
+      "at_or_above_section_max": false
+    },
+    {
+      "section": "2",
+      "vertical_a": "fintech",
+      "vertical_b": "legal",
+      "score": 0.17083333333333334,
+      "at_or_above_section_max": false
+    },
+    {
+      "section": "2",
+      "vertical_a": "edtech",
+      "vertical_b": "fintech",
+      "score": 0.16862745098039217,
+      "at_or_above_section_max": false
+    },
+    {
+      "section": "8",
+      "vertical_a": "fintech",
+      "vertical_b": "healthcare",
+      "score": 0.16030534351145037,
+      "at_or_above_section_max": false
+    },
+    {
+      "section": "8",
+      "vertical_a": "edtech",
+      "vertical_b": "fintech",
+      "score": 0.1590909090909091,
+      "at_or_above_section_max": false
+    },
+    {
+      "section": "2",
+      "vertical_a": "fintech",
+      "vertical_b": "healthcare",
+      "score": 0.1527777777777778,
+      "at_or_above_section_max": false
+    },
+    {
+      "section": "5",
+      "vertical_a": "edtech",
+      "vertical_b": "healthcare",
+      "score": 0.152,
+      "at_or_above_section_max": false
+    },
+    {
+      "section": "2",
+      "vertical_a": "edtech",
+      "vertical_b": "healthcare",
+      "score": 0.14937759336099585,
+      "at_or_above_section_max": false
+    },
+    {
+      "section": "5",
+      "vertical_a": "edtech",
+      "vertical_b": "legal",
+      "score": 0.14925373134328357,
+      "at_or_above_section_max": false
+    },
+    {
+      "section": "8",
+      "vertical_a": "edtech",
+      "vertical_b": "healthcare",
+      "score": 0.14847161572052403,
+      "at_or_above_section_max": false
+    },
+    {
+      "section": "2",
+      "vertical_a": "healthcare",
+      "vertical_b": "legal",
+      "score": 0.13043478260869565,
+      "at_or_above_section_max": false
+    }
+  ],
+  "coverage_notes": [
+    {
+      "vertical": "edtech",
+      "section": "7",
+      "issue": "missing_or_empty_section_body",
+      "detail": "No parseable Slide-equivalent body for this section. Often caused by a nonstandard heading (not '## Slide-equivalent N \u2014 \u2026'). Rework before trusting this cell's overlap score."
+    }
+  ],
+  "verdict": "PASS"
+}
