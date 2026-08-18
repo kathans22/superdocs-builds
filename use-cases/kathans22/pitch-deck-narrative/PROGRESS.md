@@ -85,3 +85,59 @@ Do **not** loosen thresholds to pass weak packs — fix YAML / narratives instea
 - `d896862` feat(mcp): auto-split any request over the configured batch cap
 - Image billing recorded in `docs/image-generation-billing.md` (next commit).
 - Cap: `SUPERDOCS_CHAT_BATCH_CAP` (default 2). 9 sections → 5 sequential chat calls.
+
+## Session 1 continued — Phase 2 / Prompt 8 (Double-parse + landed-check)
+
+- `8b1c153` feat(mcp): add parse_proposed_changes double-parse helper
+- `1bd6320` feat(mcp): add landed-check comparing pre- and post-edit section content
+- `465b62a` feat(mcp): split-retry sections that failed to land
+- `3fca179` test(mcp): confirm current 4-section batch behavior against the live API
+- **Live probe finding:** 4-section batch **did land all 4** on 18 Aug 2026 (silent no-op from Build 1 **not** reproduced this run). Cap=2 + landed-check kept as safe default; see `evidence/batch-4-section-probe.md`.
+
+## Session 1 continued — Phase 2 / Prompt 9 (Operations ledger)
+
+- `113b49d` feat(ledger): record and persist per-step operations and wall time
+- `d6dfb70` feat(ledger): idempotent skip by content key and small-sample limit
+- Ledger: step/vertical/ops/wall time → `state/ledger.json`; `--limit`; `OPS_BUDGET_CAP` / `--ops-ceiling`.
+- Phase 2 MCP+ledger spine complete for this session pack (Prompts 7–9).
+
+## Session 1 continued — Phase 3 / Prompt 10 (Narrative generation · legal)
+
+- `0169e30` feat(narrative): build the skeleton document from the deck manifest
+- `45a4e79` feat(narrative): batched section fill from a vertical's knowledge file
+- `1855882` feat(narrative): export a vertical narrative to markdown and docx
+- `beb81bd` feat(narrative): charge ops per batch to the ledger
+- Follow-ups: `201f071` BUG-001 · `b07dbb1` stricter landed-check · `2e94436` stronger fill instruction
+- Legal run exports: `out/pitch-script-legal-claritydocs.md` + `.docx` (~5–10 ops depending on retries).
+- Script notice present; not a slide file. Some sections still had leftover placeholders on first quality pass — caught after stricter landed-check (BUG-001).
+
+## Session 1 continued — Phase 3 / Prompt 11 (Format guard)
+
+- `bc1777e` feat(guard): assert exported filename and title carry no deck/slide signature
+- `03c12da` feat(guard): assert the speaking-script disclaimer line is present
+- `8dc4a88` feat(guard): block export on guard failure and name the failed check
+- `7362e6d` test(guard): guard rejects a deliberately mistitled document
+- `assert_not_deck` wired into `export_narrative_files` — failure deletes the file and raises `FormatGuardError` naming the check (`filename` / `title` / `disclaimer` / `export_path`).
+- Live check: legal export **PASS**; mistitled title `"ClarityDocs Investor Pitch Deck"` **REJECT** via `format_guard.title`.
+- `tests/test_format_guard.py`: 5 passed.
+
+## Session 1 continued — Phase 3 / Prompt 12 (Service + CLI)
+
+- `08abceb` feat(service): single entry point for generate, guard and score
+- `79691fc` feat(cli): add run command with vertical flag
+- Entry: `generator.service.run_vertical` — generate → format_guard → divergence score (deferred until ≥2 verticals on disk).
+- CLI: `python -m generator run --vertical legal` (idempotent per `narrative:<vertical>:complete:v<manifest_version>`).
+- Clean-state legal e2e: **10 ops**, `guard=passed`, exports under `out/pitch-script-legal-claritydocs.{md,docx}`.
+- Immediate re-run: `skipped=True`, ledger `[generate] legal SKIPPED (0 ops)`, total still **10 ops** (no SuperDocs regenerate).
+
+---
+
+## Phase 3 — DONE
+
+**Verified:**
+
+1. Legal speaking script generated end-to-end from clean state via the service/CLI.
+2. Format guard passes on the legal markdown + docx exports (structural — not a prose reminder).
+3. Idempotent re-run reports **SKIPPED** for the generate step; ops total unchanged.
+
+**Next:** Phase 4 — images on `image_eligible` sections; multi-vertical generate + live divergence report.
