@@ -228,6 +228,16 @@ Do **not** loosen thresholds to pass weak packs — fix YAML / narratives instea
 
 ---
 
+## Session 2 continued — Phase 7 / Prompt 20 (Divergence screen)
+
+- `e794e00` chore(ui): scaffold React and Vite
+- `c1a01f7` feat(ui): divergence screen with per-weight-class summary
+- (this) feat(ui): per-section-per-pair grid and pass/fail state
+- Hero: `ui/` — `npm run dev`. Vertical mean vs shared mean, pair×section grid, Pass/Fail.
+- No chart library. Report snapshot: `ui/src/data/divergence-report.json`.
+
+---
+
 ## Handoff for the next chat session
 
 **Branch:** `kathans22/pitch-deck-narrative` (pushed; work only under `use-cases/kathans22/pitch-deck-narrative/`).
