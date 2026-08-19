@@ -72,6 +72,8 @@ Exports land under `out/` (gitignored). Reviewable copies for this build live in
 
 ## Demo / screenshots
 
+**Walkthrough video:** [https://youtu.be/2PudzAgc994](https://youtu.be/2PudzAgc994)
+
 **Runnable demo (local):** after `docker compose up --build`, open http://localhost:8080 (UI) and http://localhost:8000/verticals (API). No separate hosted deployment URL for this build.
 
 Screenshot placeholders for a walkthrough recording:
@@ -80,7 +82,6 @@ Screenshot placeholders for a walkthrough recording:
 |---|---|
 | `docs/demo/divergence-pass.png` | Divergence screen: Pass, vertical mean vs shared mean, pair×section grid |
 | `docs/demo/narratives-fintech.png` | Narratives screen: fintech speaker notes + presenter visual |
-| `docs/demo/speaking-script-excerpt.png` | Markdown/DOCX export showing the “Speaking script — not a slide deck” line |
 
 Until those files exist, use the compose UI and the scripts under `evidence/narratives/`.
 
