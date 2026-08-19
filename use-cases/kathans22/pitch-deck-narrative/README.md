@@ -85,6 +85,16 @@ Screenshot placeholders for a walkthrough recording:
 
 Until those files exist, use the compose UI and the scripts under `evidence/narratives/`.
 
+### Demo Screens
+
+#### Divergence
+
+![Divergence screen](docs/demo/divergence-pass.png)
+
+#### Narratives — Fintech
+
+![Narratives screen — fintech speaker notes + presenter visual](docs/demo/narratives-fintech.png)
+
 ## Credit
 
 Built for the SuperDocs Task 2 use-case track (Build 2 — industry pitch-deck narrative generator) against [superdocsapp/superdocs-builds](https://github.com/superdocsapp/superdocs-builds).
