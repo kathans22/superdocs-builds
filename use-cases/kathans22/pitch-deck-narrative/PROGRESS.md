@@ -177,6 +177,7 @@ Do **not** loosen thresholds to pass weak packs — fix YAML / narratives instea
 | Divergence | `evidence/divergence-report.json` — **PASS** (mean vertical 0.115 &lt; 0.40; no cell ≥ 0.55) |
 | Human summary | `evidence/divergence-results.md` |
 | Ledger snapshot | `evidence/ledger-four-verticals.json` + report txt — **39 ops** |
+| Ops reconciliation | `evidence/ops-reconciliation.md` |
 
 **Next phase:** images on `image_eligible` sections (manifest: sections **6** and **8** only); ≥1 image per vertical in the demo. Stub: `src/generator/imagegen.py`. Billing note already filed: `docs/image-generation-billing.md` (image gen = normal chat ops, not a separate SKU).
 
@@ -292,7 +293,7 @@ Idempotent: re-run of a finished vertical for the current manifest version → l
 - `evidence/image-eligibility.md` / `image-eligibility.json`
 - `evidence/image-demo/` — fintech speaking script with §6 presenter visual in place
 - `evidence/divergence-report.json` / `divergence-results.md`
-- `evidence/ledger-four-verticals.json`
+- `evidence/ledger-four-verticals.json` / `ops-reconciliation.md`
 - `evidence/bugs/` — SuperDocs surprises
 
 **Commit hygiene reminder:** `git add` specific paths only; never stage `.env`, keys, emails, `out/`, or `state/`; `evidence/` is fine; push `kathans22/pitch-deck-narrative`.

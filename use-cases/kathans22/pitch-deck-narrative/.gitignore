@@ -7,9 +7,6 @@
 # Local submission write-up (keep untracked)
 ONE-PAGE.md
 
-# Local ops notes (keep untracked — not part of the public tree)
-evidence/ops-reconciliation.md
-
 # Generated / runtime (keep directory placeholders)
 out/*
 !out/.gitkeep

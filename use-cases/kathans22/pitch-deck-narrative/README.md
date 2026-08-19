@@ -148,7 +148,7 @@ Full pair×section matrix: open the Divergence screen (`ui/`, `#/divergence`) or
 | Live image insert (8 warranted figures × 1 chat op) | **+8** |
 | CLAUDE.md happy-path estimate (4 × 5 batches) | ~20 |
 
-Export, download, format guard, and divergence scoring are **0** ops. Actual generation ran ~2× the happy-path floor because landed-check split-retries billed extra chat calls. Still well inside the 10,000-op budget. Source of charged ops: `evidence/ledger-four-verticals.json`.
+Export, download, format guard, and divergence scoring are **0** ops. Actual generation ran ~2× the happy-path floor because landed-check split-retries billed extra chat calls. Still well inside the 10,000-op budget. See `evidence/ops-reconciliation.md`.
 
 ## Two hard constraints → enforcing mechanisms
 
