@@ -64,10 +64,20 @@ export function hashTemplateContent(content: string): string {
   return createHash("sha256").update(content.trim()).digest("hex");
 }
 
+/** The template_versions entry for this template with nothing superseding it. */
+export function currentVersion(store: VersionStore, templateId: string): TemplateVersion | null {
+  return store.template_versions.find((t) => t.template_id === templateId && t.superseded_by === null) ?? null;
+}
+
 /**
- * Registers a template version. This increment always appends a new entry —
- * identifying two versions with the same content as one and the same is the
- * next increment's job.
+ * Registers a template version, identified by its content hash rather than
+ * the version label someone typed. If this exact content has already been
+ * registered for this template — under any label — that existing entry is
+ * returned unchanged; two versions with identical content are one and the
+ * same, not a duplicate. Otherwise this is a genuinely new version, and it
+ * supersedes whatever was previously current: only the forward-pointing
+ * `superseded_by` link on the old entry changes, never its content, hash or
+ * effective date.
  */
 export function registerTemplateVersion(
   store: VersionStore,
@@ -77,21 +87,30 @@ export function registerTemplateVersion(
   requirementIds: string[],
   content: string,
 ): TemplateVersion {
+  const contentHash = hashTemplateContent(content);
+
+  const existing = store.template_versions.find(
+    (t) => t.template_id === templateId && t.content_hash === contentHash,
+  );
+  if (existing) return existing;
+
+  const previousCurrent = currentVersion(store, templateId);
+
   const entry: TemplateVersion = {
     template_id: templateId,
     version,
     effective_from: effectiveFrom,
     requirement_ids: requirementIds,
-    content_hash: hashTemplateContent(content),
+    content_hash: contentHash,
     superseded_by: null,
   };
+
+  if (previousCurrent) {
+    previousCurrent.superseded_by = version;
+  }
+
   store.template_versions.push(entry);
   return entry;
-}
-
-/** The template_versions entry for this template with nothing superseding it. */
-export function currentVersion(store: VersionStore, templateId: string): TemplateVersion | null {
-  return store.template_versions.find((t) => t.template_id === templateId && t.superseded_by === null) ?? null;
 }
 
 /**

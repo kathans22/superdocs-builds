@@ -55,14 +55,32 @@ test("clientsBehind: a client only ever issued the superseded version is behind"
   const store = freshStore();
   registerTemplateVersion(store, "agreement", "v1", "2015-04-01", ["RIA-AGR-01"], "content v1");
   recordIssue(store, "CL-01", "agreement", "v1", "2021-03-10");
-  // Manually mark v1 superseded, as registering v2 will do once that lands.
-  store.template_versions[0]!.superseded_by = "v2";
   registerTemplateVersion(store, "agreement", "v2", "2023-01-01", ["RIA-AGR-01", "RIA-AI-01"], "content v2");
 
   const behind = clientsBehind(store, "agreement");
   assert.equal(behind.length, 1);
   assert.equal(behind[0]!.client_id, "CL-01");
   assert.equal(behind[0]!.reason, "outdated_version_and_not_consented");
+});
+
+test("registerTemplateVersion: identical content is the same version, not a duplicate", () => {
+  const store = freshStore();
+  const first = registerTemplateVersion(store, "agreement", "v1", "2015-04-01", ["RIA-AGR-01"], "same content");
+  const second = registerTemplateVersion(store, "agreement", "v1-retyped", "2015-04-01", ["RIA-AGR-01"], "same content");
+
+  assert.equal(store.template_versions.length, 1);
+  assert.equal(second.version, first.version); // "v1", not "v1-retyped" — the existing entry wins
+  assert.equal(currentVersion(store, "agreement")?.superseded_by, null);
+});
+
+test("registerTemplateVersion: genuinely different content supersedes the old current version", () => {
+  const store = freshStore();
+  registerTemplateVersion(store, "agreement", "v1", "2015-04-01", ["RIA-AGR-01"], "content v1");
+  registerTemplateVersion(store, "agreement", "v2", "2023-01-01", ["RIA-AGR-01", "RIA-AI-01"], "content v2");
+
+  assert.equal(store.template_versions.length, 2);
+  assert.equal(store.template_versions[0]!.superseded_by, "v2");
+  assert.equal(currentVersion(store, "agreement")?.version, "v2");
 });
 
 test("clientsBehind: a client on the current version with nothing else wrong is not behind", () => {
