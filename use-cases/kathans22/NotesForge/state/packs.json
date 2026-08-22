@@ -1,13 +1,139 @@
 {
-  "generated_at": "2026-08-22T15:48:23.072Z",
+  "generated_at": "2026-08-22T16:04:25.628Z",
   "packs": [
+    {
+      "client_id": "CL-01",
+      "client_name": "Ananya Rao",
+      "title": "Ananya Rao - Compliance Pack",
+      "documentId": "doc_primary",
+      "durableDocumentId": "719faee5-b7ab-4fd5-b4e0-1ea0e8556b2d",
+      "sessionId": "notesforge-compliance-pack-CL-01-1787414399871",
+      "verified": true,
+      "plannedSections": [
+        {
+          "requirement_id": "RIA-AGR-01",
+          "title": "Client agreement executed before advice",
+          "heading": "Client agreement executed before advice — Evidenced (client-onboarding-notes.md)",
+          "status": "EVIDENCED"
+        },
+        {
+          "requirement_id": "RIA-RISK-01",
+          "title": "Risk profiling completed and recorded",
+          "heading": "Risk profiling completed and recorded — Stale (risk-profiling-log.md)",
+          "status": "STALE"
+        },
+        {
+          "requirement_id": "RIA-SUIT-01",
+          "title": "Suitability assessment documented and linked to advice",
+          "heading": "Suitability assessment documented and linked to advice — Stale (suitability-notes-ananya-rao.md)",
+          "status": "STALE"
+        },
+        {
+          "requirement_id": "RIA-FEE-01",
+          "title": "Fee disclosure current and consistent with the agreement",
+          "heading": "Fee disclosure current and consistent with the agreement — Evidenced (client-onboarding-notes.md)",
+          "status": "EVIDENCED"
+        }
+      ],
+      "exportedFiles": [
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-01\\Ananya Rao - Compliance Pack.docx",
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-01\\Ananya Rao - Compliance Pack.pdf"
+      ],
+      "generated_at": "2026-08-22T16:00:31.059Z"
+    },
+    {
+      "client_id": "CL-02",
+      "client_name": "Vikram Deshmukh",
+      "title": "Vikram Deshmukh - Compliance Pack",
+      "documentId": "doc_primary",
+      "durableDocumentId": "6e8fecfd-f9f6-425a-a6eb-d0e21fe15365",
+      "sessionId": "notesforge-compliance-pack-CL-02-1787414431059",
+      "verified": true,
+      "plannedSections": [
+        {
+          "requirement_id": "RIA-AGR-01",
+          "title": "Client agreement executed before advice",
+          "heading": "Client agreement executed before advice — Evidenced (client-onboarding-notes.md)",
+          "status": "EVIDENCED"
+        },
+        {
+          "requirement_id": "RIA-RISK-01",
+          "title": "Risk profiling completed and recorded",
+          "heading": "Risk profiling completed and recorded — Stale (risk-profiling-log.md)",
+          "status": "STALE"
+        },
+        {
+          "requirement_id": "RIA-SUIT-01",
+          "title": "Suitability assessment documented and linked to advice",
+          "heading": "Suitability assessment documented and linked to advice — Missing",
+          "status": "MISSING"
+        },
+        {
+          "requirement_id": "RIA-FEE-01",
+          "title": "Fee disclosure current and consistent with the agreement",
+          "heading": "Fee disclosure current and consistent with the agreement — Inconsistent (client-onboarding-notes.md)",
+          "status": "INCONSISTENT"
+        },
+        {
+          "requirement_id": "RIA-AI-01",
+          "title": "AI-assisted advice documented and disclosed",
+          "heading": "AI-assisted advice documented and disclosed — Evidenced (ai-usage-register.md)",
+          "status": "EVIDENCED"
+        }
+      ],
+      "exportedFiles": [
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-02\\Vikram Deshmukh - Compliance Pack.docx",
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-02\\Vikram Deshmukh - Compliance Pack.pdf"
+      ],
+      "generated_at": "2026-08-22T16:01:05.610Z"
+    },
+    {
+      "client_id": "CL-03",
+      "client_name": "Meera Family Trust",
+      "title": "Meera Family Trust - Compliance Pack",
+      "documentId": "doc_primary",
+      "durableDocumentId": "b7f2abef-da53-44ec-8105-5f45e3e20895",
+      "sessionId": "notesforge-compliance-pack-CL-03-1787414465611",
+      "verified": true,
+      "plannedSections": [
+        {
+          "requirement_id": "RIA-AGR-01",
+          "title": "Client agreement executed before advice",
+          "heading": "Client agreement executed before advice — Evidenced (client-onboarding-notes.md)",
+          "status": "EVIDENCED"
+        },
+        {
+          "requirement_id": "RIA-RISK-01",
+          "title": "Risk profiling completed and recorded",
+          "heading": "Risk profiling completed and recorded — Missing (risk-profiling-log.md)",
+          "status": "MISSING"
+        },
+        {
+          "requirement_id": "RIA-SUIT-01",
+          "title": "Suitability assessment documented and linked to advice",
+          "heading": "Suitability assessment documented and linked to advice — Missing",
+          "status": "MISSING"
+        },
+        {
+          "requirement_id": "RIA-FEE-01",
+          "title": "Fee disclosure current and consistent with the agreement",
+          "heading": "Fee disclosure current and consistent with the agreement — Missing",
+          "status": "MISSING"
+        }
+      ],
+      "exportedFiles": [
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-03\\Meera Family Trust - Compliance Pack.docx",
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-03\\Meera Family Trust - Compliance Pack.pdf"
+      ],
+      "generated_at": "2026-08-22T16:01:23.619Z"
+    },
     {
       "client_id": "CL-04",
       "client_name": "Kunal Sharma",
-      "title": "SEBI Compliance Pack: Kunal Sharma",
+      "title": "Kunal Sharma - Compliance Pack",
       "documentId": "doc_primary",
-      "durableDocumentId": "899ae062-d555-4b24-b4d5-499f09683f5c",
-      "sessionId": "notesforge-compliance-pack-CL-04-1787413660431",
+      "durableDocumentId": "1dabc7c9-160c-4cc2-9f7e-4534cfa4ab29",
+      "sessionId": "notesforge-compliance-pack-CL-04-1787414483619",
       "verified": true,
       "plannedSections": [
         {
@@ -42,10 +168,182 @@
         }
       ],
       "exportedFiles": [
-        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-04\\SEBI Compliance Pack Kunal Sharma.docx",
-        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-04\\SEBI Compliance Pack Kunal Sharma.pdf"
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-04\\Kunal Sharma - Compliance Pack.docx",
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-04\\Kunal Sharma - Compliance Pack.pdf"
       ],
-      "generated_at": "2026-08-22T15:48:23.070Z"
+      "generated_at": "2026-08-22T16:02:08.754Z"
+    },
+    {
+      "client_id": "CL-05",
+      "client_name": "Rohan Textiles Pvt Ltd",
+      "title": "Rohan Textiles Pvt Ltd - Compliance Pack",
+      "documentId": "doc_primary",
+      "durableDocumentId": "6e57233e-8eec-4f39-9989-79a08a26be26",
+      "sessionId": "notesforge-compliance-pack-CL-05-1787414528755",
+      "verified": true,
+      "plannedSections": [
+        {
+          "requirement_id": "RIA-AGR-01",
+          "title": "Client agreement executed before advice",
+          "heading": "Client agreement executed before advice — Evidenced (client-onboarding-notes.md)",
+          "status": "EVIDENCED"
+        },
+        {
+          "requirement_id": "RIA-RISK-01",
+          "title": "Risk profiling completed and recorded",
+          "heading": "Risk profiling completed and recorded — Stale (risk-profiling-log.md)",
+          "status": "STALE"
+        },
+        {
+          "requirement_id": "RIA-SUIT-01",
+          "title": "Suitability assessment documented and linked to advice",
+          "heading": "Suitability assessment documented and linked to advice — Missing",
+          "status": "MISSING"
+        },
+        {
+          "requirement_id": "RIA-FEE-01",
+          "title": "Fee disclosure current and consistent with the agreement",
+          "heading": "Fee disclosure current and consistent with the agreement — Evidenced (client-onboarding-notes.md)",
+          "status": "EVIDENCED"
+        }
+      ],
+      "exportedFiles": [
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-05\\Rohan Textiles Pvt Ltd - Compliance Pack.docx",
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-05\\Rohan Textiles Pvt Ltd - Compliance Pack.pdf"
+      ],
+      "generated_at": "2026-08-22T16:03:07.713Z"
+    },
+    {
+      "client_id": "CL-06",
+      "client_name": "Priya Nair",
+      "title": "Priya Nair - Compliance Pack",
+      "documentId": "doc_primary",
+      "durableDocumentId": "772a555d-093a-4479-aa6a-2abf9c922570",
+      "sessionId": "notesforge-compliance-pack-CL-06-1787414587713",
+      "verified": true,
+      "plannedSections": [
+        {
+          "requirement_id": "RIA-AGR-01",
+          "title": "Client agreement executed before advice",
+          "heading": "Client agreement executed before advice — Evidenced (client-onboarding-notes.md)",
+          "status": "EVIDENCED"
+        },
+        {
+          "requirement_id": "RIA-RISK-01",
+          "title": "Risk profiling completed and recorded",
+          "heading": "Risk profiling completed and recorded — Stale (risk-profiling-log.md)",
+          "status": "STALE"
+        },
+        {
+          "requirement_id": "RIA-SUIT-01",
+          "title": "Suitability assessment documented and linked to advice",
+          "heading": "Suitability assessment documented and linked to advice — Missing",
+          "status": "MISSING"
+        },
+        {
+          "requirement_id": "RIA-FEE-01",
+          "title": "Fee disclosure current and consistent with the agreement",
+          "heading": "Fee disclosure current and consistent with the agreement — Evidenced (client-onboarding-notes.md)",
+          "status": "EVIDENCED"
+        },
+        {
+          "requirement_id": "RIA-AI-01",
+          "title": "AI-assisted advice documented and disclosed",
+          "heading": "AI-assisted advice documented and disclosed — Missing",
+          "status": "MISSING"
+        }
+      ],
+      "exportedFiles": [
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-06\\Priya Nair - Compliance Pack.docx",
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-06\\Priya Nair - Compliance Pack.pdf"
+      ],
+      "generated_at": "2026-08-22T16:03:28.698Z"
+    },
+    {
+      "client_id": "CL-07",
+      "client_name": "Sanjay Mehta HUF",
+      "title": "Sanjay Mehta HUF - Compliance Pack",
+      "documentId": "doc_primary",
+      "durableDocumentId": "388f2e6d-89b7-4e6e-a11c-304d8c2fc89f",
+      "sessionId": "notesforge-compliance-pack-CL-07-1787414608698",
+      "verified": true,
+      "plannedSections": [
+        {
+          "requirement_id": "RIA-AGR-01",
+          "title": "Client agreement executed before advice",
+          "heading": "Client agreement executed before advice — Evidenced (client-onboarding-notes.md)",
+          "status": "EVIDENCED"
+        },
+        {
+          "requirement_id": "RIA-RISK-01",
+          "title": "Risk profiling completed and recorded",
+          "heading": "Risk profiling completed and recorded — Stale (risk-profiling-log.md)",
+          "status": "STALE"
+        },
+        {
+          "requirement_id": "RIA-SUIT-01",
+          "title": "Suitability assessment documented and linked to advice",
+          "heading": "Suitability assessment documented and linked to advice — Stale (suitability-notes-sanjay-mehta-huf.md)",
+          "status": "STALE"
+        },
+        {
+          "requirement_id": "RIA-FEE-01",
+          "title": "Fee disclosure current and consistent with the agreement",
+          "heading": "Fee disclosure current and consistent with the agreement — Evidenced (client-onboarding-notes.md)",
+          "status": "EVIDENCED"
+        }
+      ],
+      "exportedFiles": [
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-07\\Sanjay Mehta HUF - Compliance Pack.docx",
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-07\\Sanjay Mehta HUF - Compliance Pack.pdf"
+      ],
+      "generated_at": "2026-08-22T16:03:57.452Z"
+    },
+    {
+      "client_id": "CL-08",
+      "client_name": "Ishaan Kapoor",
+      "title": "Ishaan Kapoor - Compliance Pack",
+      "documentId": "doc_primary",
+      "durableDocumentId": "80418ccc-66a9-47dd-88f1-0b51ec70ddcc",
+      "sessionId": "notesforge-compliance-pack-CL-08-1787414637452",
+      "verified": true,
+      "plannedSections": [
+        {
+          "requirement_id": "RIA-AGR-01",
+          "title": "Client agreement executed before advice",
+          "heading": "Client agreement executed before advice — Evidenced (client-onboarding-notes.md)",
+          "status": "EVIDENCED"
+        },
+        {
+          "requirement_id": "RIA-RISK-01",
+          "title": "Risk profiling completed and recorded",
+          "heading": "Risk profiling completed and recorded — Stale (risk-profiling-log.md)",
+          "status": "STALE"
+        },
+        {
+          "requirement_id": "RIA-SUIT-01",
+          "title": "Suitability assessment documented and linked to advice",
+          "heading": "Suitability assessment documented and linked to advice — Missing",
+          "status": "MISSING"
+        },
+        {
+          "requirement_id": "RIA-FEE-01",
+          "title": "Fee disclosure current and consistent with the agreement",
+          "heading": "Fee disclosure current and consistent with the agreement — Evidenced (client-onboarding-notes.md)",
+          "status": "EVIDENCED"
+        },
+        {
+          "requirement_id": "RIA-AI-01",
+          "title": "AI-assisted advice documented and disclosed",
+          "heading": "AI-assisted advice documented and disclosed — Evidenced (ai-usage-register.md)",
+          "status": "EVIDENCED"
+        }
+      ],
+      "exportedFiles": [
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-08\\Ishaan Kapoor - Compliance Pack.docx",
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-08\\Ishaan Kapoor - Compliance Pack.pdf"
+      ],
+      "generated_at": "2026-08-22T16:04:25.624Z"
     }
   ]
 }

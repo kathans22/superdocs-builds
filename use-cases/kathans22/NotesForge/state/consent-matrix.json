@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-22T12:03:40.496Z",
+  "generated_at": "2026-08-22T16:05:07.369Z",
   "templates": [
     "ria-advisory-agreement"
   ],
@@ -11,7 +11,7 @@
         {
           "template_id": "ria-advisory-agreement",
           "version": "v1",
-          "current_version": "v2",
+          "current_version": "v3",
           "status": "BEHIND",
           "consented_on": "2021-03-10",
           "consent_evidence": "client-onboarding-notes.md:6"
@@ -24,11 +24,11 @@
       "cells": [
         {
           "template_id": "ria-advisory-agreement",
-          "version": "v2",
-          "current_version": "v2",
-          "status": "CURRENT_CONSENTED",
-          "consented_on": "2023-06-15",
-          "consent_evidence": "client-onboarding-notes.md:12"
+          "version": "v3",
+          "current_version": "v3",
+          "status": "CURRENT_PENDING_CONSENT",
+          "consented_on": null,
+          "consent_evidence": null
         }
       ]
     },
@@ -39,7 +39,7 @@
         {
           "template_id": "ria-advisory-agreement",
           "version": "v1",
-          "current_version": "v2",
+          "current_version": "v3",
           "status": "BEHIND",
           "consented_on": "2020-11-02",
           "consent_evidence": "client-onboarding-notes.md:19"
@@ -52,11 +52,11 @@
       "cells": [
         {
           "template_id": "ria-advisory-agreement",
-          "version": "v2",
-          "current_version": "v2",
-          "status": "CURRENT_CONSENTED",
-          "consented_on": "2024-01-20",
-          "consent_evidence": "client-onboarding-notes.md:27"
+          "version": "v3",
+          "current_version": "v3",
+          "status": "CURRENT_PENDING_CONSENT",
+          "consented_on": null,
+          "consent_evidence": null
         }
       ]
     },
@@ -67,7 +67,7 @@
         {
           "template_id": "ria-advisory-agreement",
           "version": "v1",
-          "current_version": "v2",
+          "current_version": "v3",
           "status": "BEHIND",
           "consented_on": "2022-09-05",
           "consent_evidence": "client-onboarding-notes.md:33"
@@ -80,11 +80,11 @@
       "cells": [
         {
           "template_id": "ria-advisory-agreement",
-          "version": "v2",
-          "current_version": "v2",
-          "status": "CURRENT_CONSENTED",
-          "consented_on": "2025-02-11",
-          "consent_evidence": "client-onboarding-notes.md:40"
+          "version": "v3",
+          "current_version": "v3",
+          "status": "CURRENT_PENDING_CONSENT",
+          "consented_on": null,
+          "consent_evidence": null
         }
       ]
     },
@@ -95,7 +95,7 @@
         {
           "template_id": "ria-advisory-agreement",
           "version": "v1",
-          "current_version": "v2",
+          "current_version": "v3",
           "status": "BEHIND",
           "consented_on": "2019-07-01",
           "consent_evidence": "client-onboarding-notes.md:47"
@@ -108,11 +108,11 @@
       "cells": [
         {
           "template_id": "ria-advisory-agreement",
-          "version": "v2",
-          "current_version": "v2",
-          "status": "CURRENT_CONSENTED",
-          "consented_on": "2025-08-01",
-          "consent_evidence": "client-onboarding-notes.md:55"
+          "version": "v3",
+          "current_version": "v3",
+          "status": "CURRENT_PENDING_CONSENT",
+          "consented_on": null,
+          "consent_evidence": null
         }
       ]
     }

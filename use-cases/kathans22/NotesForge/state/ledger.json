@@ -1,135 +1,783 @@
 {
   "command": "generate",
-  "generated_at": "2026-08-22T15:48:23.079Z",
+  "generated_at": "2026-08-22T16:04:25.632Z",
   "ops_cap": 25,
-  "total_spent": 1,
-  "remaining": 468,
+  "total_spent": 8,
+  "remaining": 453,
   "rows": [
     {
       "label": "chat",
       "opsCharged": 0,
       "runningTotal": 0,
-      "monthlyRemaining": 469
+      "monthlyRemaining": 461
     },
     {
       "label": "chat",
       "opsCharged": 0,
       "runningTotal": 0,
-      "monthlyRemaining": 469
+      "monthlyRemaining": 461
     },
     {
       "label": "chatAsync",
       "opsCharged": 0,
       "runningTotal": 0,
-      "monthlyRemaining": 469
+      "monthlyRemaining": 461
     },
     {
       "label": "getJob",
       "opsCharged": 0,
       "runningTotal": 0,
-      "monthlyRemaining": 469
+      "monthlyRemaining": 461
     },
     {
       "label": "getJob",
       "opsCharged": 0,
       "runningTotal": 0,
-      "monthlyRemaining": 469
+      "monthlyRemaining": 461
     },
     {
       "label": "getJob",
       "opsCharged": 0,
       "runningTotal": 0,
-      "monthlyRemaining": 469
+      "monthlyRemaining": 461
     },
     {
       "label": "getJob",
       "opsCharged": 0,
       "runningTotal": 0,
-      "monthlyRemaining": 469
+      "monthlyRemaining": 461
     },
     {
       "label": "getJob",
       "opsCharged": 0,
       "runningTotal": 0,
-      "monthlyRemaining": 469
+      "monthlyRemaining": 461
     },
     {
       "label": "getJob",
       "opsCharged": 0,
       "runningTotal": 0,
-      "monthlyRemaining": 469
+      "monthlyRemaining": 461
     },
     {
       "label": "getJob",
       "opsCharged": 0,
       "runningTotal": 0,
-      "monthlyRemaining": 469
+      "monthlyRemaining": 461
     },
     {
       "label": "getJob",
       "opsCharged": 0,
       "runningTotal": 0,
-      "monthlyRemaining": 469
+      "monthlyRemaining": 461
     },
     {
       "label": "getJob",
       "opsCharged": 0,
       "runningTotal": 0,
-      "monthlyRemaining": 469
-    },
-    {
-      "label": "getJob",
-      "opsCharged": 0,
-      "runningTotal": 0,
-      "monthlyRemaining": 469
-    },
-    {
-      "label": "getJob",
-      "opsCharged": 0,
-      "runningTotal": 0,
-      "monthlyRemaining": 469
-    },
-    {
-      "label": "getJob",
-      "opsCharged": 0,
-      "runningTotal": 0,
-      "monthlyRemaining": 469
-    },
-    {
-      "label": "getJob",
-      "opsCharged": 0,
-      "runningTotal": 0,
-      "monthlyRemaining": 469
+      "monthlyRemaining": 461
     },
     {
       "label": "getJob",
       "opsCharged": 1,
       "runningTotal": 1,
-      "monthlyRemaining": 468
+      "monthlyRemaining": 460
     },
     {
       "label": "listSessionDocuments",
       "opsCharged": 0,
       "runningTotal": 1,
-      "monthlyRemaining": 468
+      "monthlyRemaining": 460
     },
     {
       "label": "getDocument",
       "opsCharged": 0,
       "runningTotal": 1,
-      "monthlyRemaining": 468
+      "monthlyRemaining": 460
     },
     {
       "label": "requestDownloadUrl",
       "opsCharged": 0,
       "runningTotal": 1,
-      "monthlyRemaining": 468
+      "monthlyRemaining": 460
     },
     {
       "label": "requestDownloadUrl",
       "opsCharged": 0,
       "runningTotal": 1,
-      "monthlyRemaining": 468
+      "monthlyRemaining": 460
+    },
+    {
+      "label": "chatAsync",
+      "opsCharged": 0,
+      "runningTotal": 1,
+      "monthlyRemaining": 460
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 1,
+      "monthlyRemaining": 460
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 1,
+      "monthlyRemaining": 460
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 1,
+      "monthlyRemaining": 460
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 1,
+      "monthlyRemaining": 460
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 1,
+      "monthlyRemaining": 460
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 1,
+      "monthlyRemaining": 460
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 1,
+      "monthlyRemaining": 460
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 1,
+      "monthlyRemaining": 460
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 1,
+      "monthlyRemaining": 460
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 1,
+      "monthlyRemaining": 460
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 1,
+      "runningTotal": 2,
+      "monthlyRemaining": 459
+    },
+    {
+      "label": "listSessionDocuments",
+      "opsCharged": 0,
+      "runningTotal": 2,
+      "monthlyRemaining": 459
+    },
+    {
+      "label": "getDocument",
+      "opsCharged": 0,
+      "runningTotal": 2,
+      "monthlyRemaining": 459
+    },
+    {
+      "label": "requestDownloadUrl",
+      "opsCharged": 0,
+      "runningTotal": 2,
+      "monthlyRemaining": 459
+    },
+    {
+      "label": "requestDownloadUrl",
+      "opsCharged": 0,
+      "runningTotal": 2,
+      "monthlyRemaining": 459
+    },
+    {
+      "label": "chatAsync",
+      "opsCharged": 0,
+      "runningTotal": 2,
+      "monthlyRemaining": 459
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 2,
+      "monthlyRemaining": 459
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 2,
+      "monthlyRemaining": 459
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 2,
+      "monthlyRemaining": 459
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 1,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "listSessionDocuments",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getDocument",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "requestDownloadUrl",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "requestDownloadUrl",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "chatAsync",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 3,
+      "monthlyRemaining": 458
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 1,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "listSessionDocuments",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getDocument",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "requestDownloadUrl",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "requestDownloadUrl",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "chatAsync",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 4,
+      "monthlyRemaining": 457
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 1,
+      "runningTotal": 5,
+      "monthlyRemaining": 456
+    },
+    {
+      "label": "listSessionDocuments",
+      "opsCharged": 0,
+      "runningTotal": 5,
+      "monthlyRemaining": 456
+    },
+    {
+      "label": "getDocument",
+      "opsCharged": 0,
+      "runningTotal": 5,
+      "monthlyRemaining": 456
+    },
+    {
+      "label": "requestDownloadUrl",
+      "opsCharged": 0,
+      "runningTotal": 5,
+      "monthlyRemaining": 456
+    },
+    {
+      "label": "requestDownloadUrl",
+      "opsCharged": 0,
+      "runningTotal": 5,
+      "monthlyRemaining": 456
+    },
+    {
+      "label": "chatAsync",
+      "opsCharged": 0,
+      "runningTotal": 5,
+      "monthlyRemaining": 456
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 5,
+      "monthlyRemaining": 456
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 5,
+      "monthlyRemaining": 456
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 5,
+      "monthlyRemaining": 456
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 5,
+      "monthlyRemaining": 456
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 5,
+      "monthlyRemaining": 456
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 1,
+      "runningTotal": 6,
+      "monthlyRemaining": 455
+    },
+    {
+      "label": "listSessionDocuments",
+      "opsCharged": 0,
+      "runningTotal": 6,
+      "monthlyRemaining": 455
+    },
+    {
+      "label": "getDocument",
+      "opsCharged": 0,
+      "runningTotal": 6,
+      "monthlyRemaining": 455
+    },
+    {
+      "label": "requestDownloadUrl",
+      "opsCharged": 0,
+      "runningTotal": 6,
+      "monthlyRemaining": 455
+    },
+    {
+      "label": "requestDownloadUrl",
+      "opsCharged": 0,
+      "runningTotal": 6,
+      "monthlyRemaining": 455
+    },
+    {
+      "label": "chatAsync",
+      "opsCharged": 0,
+      "runningTotal": 6,
+      "monthlyRemaining": 455
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 6,
+      "monthlyRemaining": 455
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 6,
+      "monthlyRemaining": 455
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 6,
+      "monthlyRemaining": 455
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 6,
+      "monthlyRemaining": 455
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 6,
+      "monthlyRemaining": 455
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 6,
+      "monthlyRemaining": 455
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 6,
+      "monthlyRemaining": 455
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 6,
+      "monthlyRemaining": 455
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 1,
+      "runningTotal": 7,
+      "monthlyRemaining": 454
+    },
+    {
+      "label": "listSessionDocuments",
+      "opsCharged": 0,
+      "runningTotal": 7,
+      "monthlyRemaining": 454
+    },
+    {
+      "label": "getDocument",
+      "opsCharged": 0,
+      "runningTotal": 7,
+      "monthlyRemaining": 454
+    },
+    {
+      "label": "requestDownloadUrl",
+      "opsCharged": 0,
+      "runningTotal": 7,
+      "monthlyRemaining": 454
+    },
+    {
+      "label": "requestDownloadUrl",
+      "opsCharged": 0,
+      "runningTotal": 7,
+      "monthlyRemaining": 454
+    },
+    {
+      "label": "chatAsync",
+      "opsCharged": 0,
+      "runningTotal": 7,
+      "monthlyRemaining": 454
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 7,
+      "monthlyRemaining": 454
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 7,
+      "monthlyRemaining": 454
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 7,
+      "monthlyRemaining": 454
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 7,
+      "monthlyRemaining": 454
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 7,
+      "monthlyRemaining": 454
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 7,
+      "monthlyRemaining": 454
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 7,
+      "monthlyRemaining": 454
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 7,
+      "monthlyRemaining": 454
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 1,
+      "runningTotal": 8,
+      "monthlyRemaining": 453
+    },
+    {
+      "label": "listSessionDocuments",
+      "opsCharged": 0,
+      "runningTotal": 8,
+      "monthlyRemaining": 453
+    },
+    {
+      "label": "getDocument",
+      "opsCharged": 0,
+      "runningTotal": 8,
+      "monthlyRemaining": 453
+    },
+    {
+      "label": "requestDownloadUrl",
+      "opsCharged": 0,
+      "runningTotal": 8,
+      "monthlyRemaining": 453
+    },
+    {
+      "label": "requestDownloadUrl",
+      "opsCharged": 0,
+      "runningTotal": 8,
+      "monthlyRemaining": 453
     }
   ]
 }

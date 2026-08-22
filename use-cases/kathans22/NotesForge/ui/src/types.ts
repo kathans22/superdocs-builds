@@ -149,13 +149,24 @@ export interface AmendmentScope {
   affected_client_ids: string[];
 }
 
-export interface AmendmentEventRecord {
+export interface AmendmentEvent {
   requirement_id: string;
   kind: AmendmentKind;
   effective_from: string;
   scope: AmendmentScope;
   notices: AmendmentNotice[];
 }
+
+/** A structured batch (event.json present) or a raw one (older .md-only notices, read verbatim). */
+export type AmendmentBatch =
+  | { event_dir: string; structured: true; event: AmendmentEvent }
+  | {
+      event_dir: string;
+      structured: false;
+      requirement_id: string;
+      effective_from: string | null;
+      notices_raw: { client_id: string; filename: string; content: string }[];
+    };
 
 export interface LedgerRow {
   label: string;

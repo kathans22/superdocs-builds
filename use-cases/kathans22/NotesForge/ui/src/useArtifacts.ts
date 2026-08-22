@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type {
-  AmendmentEventRecord,
+  AmendmentBatch,
   Client,
   ConsentMatrix,
   CoverageSnapshot,
@@ -19,7 +19,7 @@ export interface Artifacts {
   consentMatrix: ConsentMatrix;
   requirementsSnapshot: Requirement[] | null;
   ledger: LedgerSnapshot | null;
-  amendments: AmendmentEventRecord[];
+  amendments: AmendmentBatch[];
   corpusNotes: Record<string, string>;
 }
 
@@ -66,7 +66,7 @@ export function useArtifacts(): ArtifactsState {
           fetchJson<ConsentMatrix>("consent-matrix.json"),
           fetchJson<Requirement[] | null>("requirements-snapshot.json"),
           fetchJson<LedgerSnapshot | null>("ledger.json"),
-          fetchJson<AmendmentEventRecord[]>("amendments.json"),
+          fetchJson<AmendmentBatch[]>("amendments.json"),
           fetchJson<Record<string, string>>("corpus-notes.json"),
         ]);
 

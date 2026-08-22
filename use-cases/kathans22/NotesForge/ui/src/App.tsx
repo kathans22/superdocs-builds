@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Clients } from "./screens/Clients";
 import { Coverage } from "./screens/Coverage";
 import { Placeholder } from "./screens/Placeholder";
 import { useArtifacts } from "./useArtifacts";
@@ -39,7 +40,7 @@ export default function App() {
         {artifacts.status === "ready" && (
           <>
             {tab === "COVERAGE" && <Coverage data={artifacts.data} />}
-            {tab === "CLIENTS" && <Placeholder name="CLIENTS" />}
+            {tab === "CLIENTS" && <Clients data={artifacts.data} />}
             {tab === "PACKS" && <Placeholder name="PACKS" />}
             {tab === "AMENDMENTS" && <Placeholder name="AMENDMENTS" />}
             {tab === "RUN" && <Placeholder name="RUN" />}

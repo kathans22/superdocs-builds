@@ -38,26 +38,54 @@ async function copyStateFile(relPath: string, destName: string, fallback: unknow
   }
 }
 
-/** Walks state/amendments/<REQ-ID>-<date>/event.json — the structured sibling of each notice batch. */
+/**
+ * Walks state/amendments/<REQ-ID>-<date>/. Prefers the structured event.json
+ * sibling (written by --amend runs after this field existed); a batch of
+ * notices from before then has no event.json, so its .md files are copied
+ * in verbatim instead — never reconstructed or parsed, just read as-is, so
+ * the UI shows exactly what's actually on disk either way.
+ */
 async function collectAmendmentEvents(): Promise<unknown[]> {
   const amendmentsDir = path.join(ROOT, "state", "amendments");
-  let entries: import("node:fs").Dirent[];
+  let dirs: import("node:fs").Dirent[];
   try {
-    entries = await readdir(amendmentsDir, { withFileTypes: true });
+    dirs = await readdir(amendmentsDir, { withFileTypes: true });
   } catch (err) {
     if (isEnoent(err)) return [];
     throw err;
   }
 
   const events: unknown[] = [];
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+  for (const entry of dirs.sort((a, b) => a.name.localeCompare(b.name))) {
     if (!entry.isDirectory()) continue;
+    const eventDir = path.join(amendmentsDir, entry.name);
+    const match = /^(.+)-(\d{4}-\d{2}-\d{2})$/.exec(entry.name);
+
     try {
-      const text = await readFile(path.join(amendmentsDir, entry.name, "event.json"), "utf8");
-      events.push(JSON.parse(text));
+      const text = await readFile(path.join(eventDir, "event.json"), "utf8");
+      events.push({ event_dir: entry.name, structured: true, event: JSON.parse(text) });
+      continue;
     } catch (err) {
       if (!isEnoent(err)) throw err;
     }
+
+    // No event.json for this batch — fall back to the raw notices.
+    const files = (await readdir(eventDir)).filter((f) => f.endsWith("-notice.md"));
+    const notices: { client_id: string; filename: string; content: string }[] = [];
+    for (const file of files.sort()) {
+      notices.push({
+        client_id: file.replace(/-notice\.md$/, ""),
+        filename: file,
+        content: await readFile(path.join(eventDir, file), "utf8"),
+      });
+    }
+    events.push({
+      event_dir: entry.name,
+      structured: false,
+      requirement_id: match?.[1] ?? entry.name,
+      effective_from: match?.[2] ?? null,
+      notices_raw: notices,
+    });
   }
   return events;
 }
