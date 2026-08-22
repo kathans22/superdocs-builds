@@ -118,7 +118,11 @@ SEBI's AI-disclosure obligations for investment advisers — the per-model trace
 
 ### UI console
 
-[`ui/`](ui/) is a small React/Vite console over the CLI's own output — five tabs (Coverage, Clients, Packs, Amendments, Run) reading `state/*.json`, `config/` and `out/` as static JSON (`npm run sync` in `ui/`, wired as `predev`/`prebuild`). It recomputes nothing: the coverage grid, the consent states, the pack manifests and the ops ledger are exactly what the CLI already wrote to disk. See [`ui/README.md`](ui/README.md) — a screenshot of the coverage grid is below.
+[`ui/`](ui/) is a small React/Vite console over the CLI's own output — five tabs (Coverage, Clients, Packs, Amendments, Run) reading `state/*.json`, `config/` and `out/` as static JSON (`npm run sync` in `ui/`, wired as `predev`/`prebuild`). It recomputes nothing: the coverage grid, the consent states, the pack manifests and the ops ledger are exactly what the CLI already wrote to disk. See [`ui/README.md`](ui/README.md).
+
+Requirements down, clients across, every planted gap visible at a glance — from a real run against the seeded corpus, not a mockup:
+
+![Coverage grid: RIA-REC-01 firm-level MISSING, CL-01's stale risk review, CL-06's missing AI disclosure, and CL-02's fee CONFLICT all visible as colour-coded cells against the requirement × client grid](docs/coverage-grid.png)
 
 ### Operation economics
 
@@ -249,3 +253,7 @@ corpus/
 
 ui/                  React/Vite console reading state/*.json, config/ and out/ — see ui/README.md
 ```
+
+## Credit
+
+Built for the SuperDocs task, by [kathans22](https://github.com/kathans22).
