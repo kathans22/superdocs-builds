@@ -2,8 +2,76 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { OpsLedger } from "../budget.js";
+import type { SuperDocsClient } from "../client.js";
 import type { Requirement } from "../domain/requirements.js";
-import { currentVersion, latestClientVersion, type VersionStore } from "./registry.js";
+import {
+  currentVersion,
+  latestClientVersion,
+  registerTemplateVersion,
+  type TemplateVersion,
+  type VersionStore,
+} from "./registry.js";
+
+const CONFIG_TEMPLATES_DIR = fileURLToPath(new URL("../../config/templates", import.meta.url));
+const STATE_TEMPLATES_DIR = fileURLToPath(new URL("../../state/templates", import.meta.url));
+
+/**
+ * Which clause in a template's text embodies a given requirement. Only
+ * covers the one worked case (RIA-AI-01 → the AI-use clause in the
+ * advisory agreement) — a real system would carry this mapping in the
+ * template's own config, not a hardcoded table.
+ */
+const CLAUSE_HEADING_BY_REQUIREMENT: Record<string, string> = {
+  "RIA-AI-01": "6. Use of AI Tools in Advice",
+};
+
+async function readTemplateContent(templateId: string, version: string): Promise<string> {
+  const filename = `${templateId}-${version}.md`;
+  try {
+    return await readFile(path.join(CONFIG_TEMPLATES_DIR, filename), "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+  // Hand-authored baselines live in config/templates/; anything an
+  // amendment itself produced lives in state/templates/ — generated
+  // history, not hand-authored input.
+  return readFile(path.join(STATE_TEMPLATES_DIR, filename), "utf8");
+}
+
+async function writeAmendedTemplateContent(templateId: string, version: string, content: string): Promise<void> {
+  await mkdir(STATE_TEMPLATES_DIR, { recursive: true });
+  await writeFile(path.join(STATE_TEMPLATES_DIR, `${templateId}-${version}.md`), content, "utf8");
+}
+
+export function extractClauseBody(templateContent: string, clauseHeading: string): string {
+  const lines = templateContent.split(/\r?\n/);
+  const headingIdx = lines.findIndex((l) => l.trim() === clauseHeading);
+  if (headingIdx === -1) return "";
+  const endIdx = findClauseEnd(lines, headingIdx);
+  return lines
+    .slice(headingIdx + 1, endIdx)
+    .join(" ")
+    .trim();
+}
+
+function findClauseEnd(lines: string[], headingIdx: number): number {
+  for (let i = headingIdx + 1; i < lines.length; i++) {
+    const trimmed = lines[i]!.trim();
+    if (/^\d+\.\s/.test(trimmed) || trimmed.startsWith("Signed:")) return i;
+  }
+  return lines.length;
+}
+
+export function spliceClauseBody(templateContent: string, clauseHeading: string, newBody: string): string {
+  const lines = templateContent.split(/\r?\n/);
+  const headingIdx = lines.findIndex((l) => l.trim() === clauseHeading);
+  if (headingIdx === -1) {
+    throw new Error(`spliceClauseBody: heading "${clauseHeading}" not found in template`);
+  }
+  const endIdx = findClauseEnd(lines, headingIdx);
+  return [...lines.slice(0, headingIdx + 1), `   ${newBody.trim()}`, "", ...lines.slice(endIdx)].join("\n");
+}
 
 export const DEFAULT_REQUIREMENTS_SNAPSHOT_PATH = fileURLToPath(
   new URL("../../state/requirements-snapshot.json", import.meta.url),
@@ -117,4 +185,78 @@ export function scopeAmendment(store: VersionStore, event: AmendmentEvent): Amen
     affected_template_ids: affectedTemplateIds,
     affected_client_ids: Array.from(affectedClientIds).sort(),
   };
+}
+
+export class AmendmentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AmendmentError";
+  }
+}
+
+/**
+ * Drafts the amended clause in ONE chat call — the model sees only the
+ * current clause body and the new obligation text, and returns only the
+ * replacement clause body. Nothing else in the template is touched or
+ * regenerated; the rest of the document is carried over verbatim from the
+ * current version's content.
+ */
+export async function amendTemplate(
+  client: SuperDocsClient,
+  ledger: OpsLedger,
+  store: VersionStore,
+  templateId: string,
+  event: AmendmentEvent,
+  effectiveFrom: string,
+  nextVersionLabel: string,
+): Promise<TemplateVersion> {
+  const current = currentVersion(store, templateId);
+  if (!current) {
+    throw new AmendmentError(`amendTemplate: no current version registered for "${templateId}"`);
+  }
+
+  const clauseHeading = CLAUSE_HEADING_BY_REQUIREMENT[event.requirement_id];
+  if (!clauseHeading) {
+    throw new AmendmentError(
+      `amendTemplate: no known clause heading for requirement "${event.requirement_id}" in "${templateId}"`,
+    );
+  }
+
+  const currentContent = await readTemplateContent(templateId, current.version);
+  const currentClauseBody = extractClauseBody(currentContent, clauseHeading);
+
+  // One chat call, scoped to a single clause — not a document regeneration.
+  ledger.assertCanSpend(1);
+
+  const message = `The following contractual clause needs updating because the regulatory requirement behind it has changed.
+
+Current clause body (from the client agreement, under the heading "${clauseHeading}"):
+"${currentClauseBody}"
+
+The requirement now additionally requires:
+${event.updated.obligation}
+
+Respond with ONLY the replacement clause body text — no heading, no markdown formatting, no commentary, no code fences. One paragraph, consistent in tone and length with the original.`;
+
+  const response = await client.chat({
+    message,
+    session_id: `notesforge-amend-${templateId}-${Date.now()}`,
+    model_tier: "core",
+  });
+
+  const newContent = spliceClauseBody(currentContent, clauseHeading, response.response.trim());
+  const requirementIds = Array.from(new Set([...current.requirement_ids, event.requirement_id]));
+
+  const newVersion = registerTemplateVersion(
+    store,
+    templateId,
+    nextVersionLabel,
+    effectiveFrom,
+    requirementIds,
+    newContent,
+  );
+
+  await writeAmendedTemplateContent(templateId, newVersion.version, newContent);
+
+  return newVersion;
 }

@@ -2,7 +2,41 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Requirement } from "../domain/requirements.js";
 import { recordIssue, registerTemplateVersion, type VersionStore } from "./registry.js";
-import { detectAmendments, scopeAmendment } from "./amend.js";
+import { detectAmendments, extractClauseBody, scopeAmendment, spliceClauseBody } from "./amend.js";
+
+const SAMPLE_TEMPLATE = [
+  "# Agreement",
+  "",
+  "5. Record Keeping",
+  "   The Adviser shall maintain records.",
+  "",
+  "6. Use of AI Tools in Advice",
+  "   Where the Adviser uses AI-assisted tools, disclosure applies.",
+  "",
+  "Signed: ______________________   Date: ______________",
+].join("\n");
+
+test("extractClauseBody: pulls just the body text under the given heading", () => {
+  const body = extractClauseBody(SAMPLE_TEMPLATE, "6. Use of AI Tools in Advice");
+  assert.equal(body, "Where the Adviser uses AI-assisted tools, disclosure applies.");
+});
+
+test("extractClauseBody: an unknown heading returns an empty string, not a crash", () => {
+  assert.equal(extractClauseBody(SAMPLE_TEMPLATE, "99. Nonexistent Clause"), "");
+});
+
+test("spliceClauseBody: replaces only the target clause, leaving everything else untouched", () => {
+  const updated = spliceClauseBody(
+    SAMPLE_TEMPLATE,
+    "6. Use of AI Tools in Advice",
+    "Updated clause text with the new per-model tracing requirement.",
+  );
+
+  assert.match(updated, /5\. Record Keeping\n {3}The Adviser shall maintain records\./);
+  assert.match(updated, /6\. Use of AI Tools in Advice\n {3}Updated clause text with the new per-model tracing requirement\./);
+  assert.match(updated, /Signed: /);
+  assert.doesNotMatch(updated, /disclosure applies/);
+});
 
 function req(overrides: Partial<Requirement> = {}): Requirement {
   return {
