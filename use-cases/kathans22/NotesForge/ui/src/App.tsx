@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { Amendments } from "./screens/Amendments";
 import { Clients } from "./screens/Clients";
 import { Coverage } from "./screens/Coverage";
+import { Packs } from "./screens/Packs";
 import { Placeholder } from "./screens/Placeholder";
 import { useArtifacts } from "./useArtifacts";
 
@@ -41,8 +43,8 @@ export default function App() {
           <>
             {tab === "COVERAGE" && <Coverage data={artifacts.data} />}
             {tab === "CLIENTS" && <Clients data={artifacts.data} />}
-            {tab === "PACKS" && <Placeholder name="PACKS" />}
-            {tab === "AMENDMENTS" && <Placeholder name="AMENDMENTS" />}
+            {tab === "PACKS" && <Packs data={artifacts.data} />}
+            {tab === "AMENDMENTS" && <Amendments data={artifacts.data} />}
             {tab === "RUN" && <Placeholder name="RUN" />}
           </>
         )}
