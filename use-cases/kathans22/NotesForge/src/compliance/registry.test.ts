@@ -3,7 +3,9 @@ import { test } from "node:test";
 import {
   clientsBehind,
   clientsOnVersion,
+  ConsentEvidenceRequiredError,
   currentVersion,
+  recordConsent,
   recordIssue,
   registerTemplateVersion,
   RegistryError,
@@ -81,6 +83,55 @@ test("registerTemplateVersion: genuinely different content supersedes the old cu
   assert.equal(store.template_versions.length, 2);
   assert.equal(store.template_versions[0]!.superseded_by, "v2");
   assert.equal(currentVersion(store, "agreement")?.version, "v2");
+});
+
+test("recordConsent: refuses to record consent with no evidence (undefined, null, or blank)", () => {
+  const store = freshStore();
+  registerTemplateVersion(store, "agreement", "v1", "2015-04-01", ["RIA-AGR-01"], "content v1");
+  recordIssue(store, "CL-01", "agreement", "v1", "2021-03-10");
+
+  assert.throws(
+    () => recordConsent(store, "CL-01", "agreement", "v1", "2021-03-10", undefined),
+    ConsentEvidenceRequiredError,
+  );
+  assert.throws(
+    () => recordConsent(store, "CL-01", "agreement", "v1", "2021-03-10", null),
+    ConsentEvidenceRequiredError,
+  );
+  assert.throws(
+    () => recordConsent(store, "CL-01", "agreement", "v1", "2021-03-10", "   "),
+    ConsentEvidenceRequiredError,
+  );
+
+  // None of the failed attempts left a partial write.
+  assert.equal(store.client_versions[0]!.consented_on, null);
+  assert.equal(store.client_versions[0]!.consent_evidence, null);
+});
+
+test("recordConsent: succeeds with evidence and sets both fields together", () => {
+  const store = freshStore();
+  registerTemplateVersion(store, "agreement", "v1", "2015-04-01", ["RIA-AGR-01"], "content v1");
+  recordIssue(store, "CL-01", "agreement", "v1", "2021-03-10");
+
+  const record = recordConsent(
+    store,
+    "CL-01",
+    "agreement",
+    "v1",
+    "2021-03-10",
+    "client-onboarding-notes.md:5",
+  );
+  assert.equal(record.consented_on, "2021-03-10");
+  assert.equal(record.consent_evidence, "client-onboarding-notes.md:5");
+});
+
+test("recordConsent: refuses to consent to an issuance that doesn't exist", () => {
+  const store = freshStore();
+  registerTemplateVersion(store, "agreement", "v1", "2015-04-01", ["RIA-AGR-01"], "content v1");
+  assert.throws(
+    () => recordConsent(store, "CL-01", "agreement", "v1", "2021-03-10", "some-evidence.md:1"),
+    RegistryError,
+  );
 });
 
 test("clientsBehind: a client on the current version with nothing else wrong is not behind", () => {

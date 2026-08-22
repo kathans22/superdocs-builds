@@ -147,6 +147,52 @@ export function recordIssue(
   return entry;
 }
 
+export class ConsentEvidenceRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConsentEvidenceRequiredError";
+  }
+}
+
+/**
+ * Records that a client consented to a specific issued version. This is
+ * the one enforcement point for the whole store: consented_on is never set
+ * without a consent_evidence reference, checked here in the writer, not
+ * left to callers to remember. A consent without evidence is not a
+ * consent.
+ */
+export function recordConsent(
+  store: VersionStore,
+  clientId: string,
+  templateId: string,
+  version: string,
+  consentedOn: string,
+  consentEvidence: string | null | undefined,
+): ClientVersionRecord {
+  if (!consentEvidence || consentEvidence.trim() === "") {
+    throw new ConsentEvidenceRequiredError(
+      `recordConsent: refusing to record consent for ${clientId} on ${templateId}@${version} without a consent_evidence reference — a consent without evidence is not a consent`,
+    );
+  }
+
+  const record = store.client_versions.find(
+    (r) =>
+      r.client_id === clientId &&
+      r.template_id === templateId &&
+      r.version === version &&
+      r.consented_on === null,
+  );
+  if (!record) {
+    throw new RegistryError(
+      `recordConsent: no pending (unconsented) issuance of ${templateId}@${version} found for ${clientId} — recordIssue must run first`,
+    );
+  }
+
+  record.consented_on = consentedOn;
+  record.consent_evidence = consentEvidence;
+  return record;
+}
+
 /** A client's most recent issuance of a given template, by issued_on. */
 function latestRecordFor(
   store: VersionStore,
