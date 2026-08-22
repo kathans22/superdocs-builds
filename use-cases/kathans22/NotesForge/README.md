@@ -120,6 +120,43 @@ SEBI's AI-disclosure obligations for investment advisers — the per-model trace
 
 [`ui/`](ui/) is a small React/Vite console over the CLI's own output — five tabs (Coverage, Clients, Packs, Amendments, Run) reading `state/*.json`, `config/` and `out/` as static JSON (`npm run sync` in `ui/`, wired as `predev`/`prebuild`). It recomputes nothing: the coverage grid, the consent states, the pack manifests and the ops ledger are exactly what the CLI already wrote to disk. See [`ui/README.md`](ui/README.md) — a screenshot of the coverage grid is below.
 
+### Operation economics
+
+Four different things get measured below, and each is computed a different way before any number is attached to it:
+
+- **Coverage assessment** is almost entirely deterministic — keyword presence/absence, date arithmetic, regex-extracted figure comparison — with exactly one narrow model escalation (a suitability note that names its own profile as stale), batched so judging every ambiguous case costs one call regardless of how many there are.
+- **Full pack generation** batches one outline-planning call for the whole roster, then one `chat/async` draft per client (all of that client's sections in a single turn).
+- **A targeted amendment** is one `chat` call, scoped to a single clause, regardless of how many clients it fans out to afterward — the fan-out (new issuances, notices) is bookkeeping, not model calls.
+- **The comparison row** is a real regeneration of the same affected clients under a second ledger, run by `--amend` itself specifically to make this an executed measurement, not an estimate.
+
+| Operation | Method | Model calls | Ops charged | Clients affected |
+|---|---|---:|---:|---:|
+| Coverage assessment (`--coverage`, full roster) | deterministic pass + 1 narrow escalation | 1 | 0 | 8 (+ firm-level) |
+| Full pack generation (`--generate`, full roster) | 1 batched outline + 1 `chat/async` per client | 10 | 8 | 8 |
+| Targeted amendment (`--amend`, RIA-AI-01) | 1 `chat` call, one clause | 1 | 0 | 4 (blast radius) |
+| Full regeneration of the same 4 clients (comparison) | 1 batched outline + 1 `chat/async` per client | 5 | 4 | 4 |
+
+The amendment/regeneration row is the actual payoff. A real requirement change, scoped correctly, touched 4 of 8 clients — not all 8, because CL-01/03/05/07 were already on a superseded template version and out of scope — for 0 ops against 4 ops to regenerate just those four the naive way. `state/versions.json`'s diff for that run was pure addition: not one existing line for an unaffected client changed. [`src/compliance/amend.test.ts`](src/compliance/amend.test.ts) proves this byte-for-byte against a synthetic store; the numbers above are from the same shape of run against the real seeded corpus, not the test's synthetic one.
+
+### What it does not do
+
+- It does not verify that evidence is *correct* — only that it is *present and current*. A signed agreement on file is evidence an agreement was signed; whether its terms are lawful is a professional judgment this tool does not make.
+- It does not interpret regulation. `config/requirements.yaml`'s obligation text is transcribed from the cited SEBI regulation, not paraphrased or summarised by a model at any point in the pipeline.
+- It does not replace a compliance professional, and every document it produces says so.
+- A missing requirement is reported as MISSING. It is never inferred, never softened by nearby text that merely *names* the gap — see `corpus/MANIFEST.md`'s RIA-REC-01 case, where a note saying "no one's formally checked" is not treated as evidence the thing was checked — and never filled in by the model.
+- It does not resolve a conflict it finds. An INCONSISTENT finding (CL-02's fee figure) states what disagrees and where, and leaves the resolution to a human.
+- It does not claim any certification, for the tool or for the fictional firm it was built to exercise.
+
+### Design decisions (compliance mode)
+
+**Deterministic where the check is arithmetic.** Coverage status is computed by keyword search, date subtraction, and regex-extracted number comparison wherever the underlying question *is* arithmetic — a model call is reserved for the one requirement (`RIA-SUIT-01`) where a genuine judgment call exists, and even then only for the specific clients whose notes name their own ambiguity.
+
+**Template versions are identified by content, not a label.** `registerTemplateVersion` hashes a template's substantive content; two versions someone typed different labels for but which are byte-identical are the same version, and a version's identity survives even if someone edits the label later.
+
+**Consent requires evidence, enforced in the writer.** `recordConsent` throws rather than set `consented_on` without a `consent_evidence` reference — checked once, in the one function that can set it, not left to every caller to remember.
+
+**Amendments are scoped to a blast radius, not the whole roster.** `scopeAmendment` finds exactly which templates and which clients are actually affected by a changed requirement before anything is drafted or issued; a client on an unrelated template, or already past the version in question, is never touched, notified, or re-billed.
+
 ### All data is invented
 
 Meridian Advisory Services, its advisers, its eight clients, every date, every fee figure and every note in [`corpus/ria-compliance/`](corpus/ria-compliance/) are fictional — see [`corpus/MANIFEST.md`](corpus/MANIFEST.md) for exactly what was planted and why. The seven SEBI requirements in [`config/requirements.yaml`](config/requirements.yaml) (and their revision in [`config/requirements-v2.yaml`](config/requirements-v2.yaml)) are real regulation, citation-checked against actual SEBI (Investment Advisers) Regulations, 2013 provisions — fabricating the regulation would make the whole exercise meaningless. Nothing here is legal advice, and no certification is claimed anywhere in the tool or this document.
