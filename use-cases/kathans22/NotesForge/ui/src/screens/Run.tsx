@@ -27,7 +27,7 @@ function groupConsecutive(rows: LedgerRow[]): RowGroup[] {
   return groups;
 }
 
-export function Run({ data }: { data: Artifacts }) {
+export function Run({ data, reload }: { data: Artifacts; reload: () => void }) {
   const { ledger } = data;
 
   if (!ledger) {
@@ -35,8 +35,11 @@ export function Run({ data }: { data: Artifacts }) {
       <div className="panel">
         <h2>Operations ledger</h2>
         <p className="state-message">
-          No run on file yet — run any `compliance` command (--coverage, --generate, --amend) and re-sync.
+          No run on file yet — trigger a command from the Coverage, Clients, Packs or Amendments tab.
         </p>
+        <button type="button" className="run-toggle" onClick={reload}>
+          refresh
+        </button>
       </div>
     );
   }
@@ -72,6 +75,10 @@ export function Run({ data }: { data: Artifacts }) {
           {" "}
           {ledger.ops_cap}-op cap used.
         </p>
+
+        <button type="button" className="run-toggle" onClick={reload} style={{ marginBottom: "0.8rem" }}>
+          refresh
+        </button>
 
         <table>
           <thead>

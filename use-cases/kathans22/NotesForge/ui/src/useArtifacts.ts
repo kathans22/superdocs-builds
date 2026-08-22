@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   AmendmentBatch,
   Client,
@@ -26,7 +26,9 @@ export interface Artifacts {
 type ArtifactsState = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; data: Artifacts };
 
 async function fetchJson<T>(path: string): Promise<T> {
-  const res = await fetch(`/data/${path}`);
+  // no-store: after a run triggers a re-sync, the browser must not serve a
+  // stale cached copy of a file at the same URL.
+  const res = await fetch(`/data/${path}`, { cache: "no-store" });
   if (!res.ok) {
     throw new Error(`failed to load /data/${path}: ${res.status} ${res.statusText}`);
   }
@@ -34,12 +36,16 @@ async function fetchJson<T>(path: string): Promise<T> {
 }
 
 /**
- * Loads every synced artifact once on mount. This reads static JSON written
- * by `npm run sync` (ui/scripts/sync-artifacts.ts) — no recomputation, no
- * second pipeline, just the CLI's own state/*.json and config/ data.
+ * Loads every synced artifact, and exposes `reload` so a UI action (running
+ * a compliance command via RunPanel) can refresh the screen with whatever
+ * that run just wrote — still just reading state/*.json back, never
+ * recomputing anything itself.
  */
-export function useArtifacts(): ArtifactsState {
+export function useArtifacts(): { state: ArtifactsState; reload: () => void } {
   const [state, setState] = useState<ArtifactsState>({ status: "loading" });
+  const [generation, setGeneration] = useState(0);
+
+  const reload = useCallback(() => setGeneration((g) => g + 1), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,7 +104,7 @@ export function useArtifacts(): ArtifactsState {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [generation]);
 
-  return state;
+  return { state, reload };
 }

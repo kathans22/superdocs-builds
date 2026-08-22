@@ -1,15 +1,10 @@
 # Compliance console
 
-A read-only console over the compliance CLI's own run artifacts — no second
-pipeline, no recomputation. It shows what `compliance --coverage`,
-`--generate`, `--matrix` and `--amend` already produced in `../state/`,
-`../config/` and `../out/`.
+A console over the compliance CLI's own run artifacts — no second pipeline,
+no recomputation. Everything it shows is `state/*.json`, `config/` and
+`out/`, exactly as the CLI already wrote them.
 
 ## Usage
-
-From the parent `NotesForge/` directory, run whichever compliance commands
-you want reflected (at minimum `compliance --coverage` for the coverage
-grid; `--generate`, `--matrix` and `--amend` for the other screens), then:
 
 ```bash
 cd ui
@@ -17,12 +12,30 @@ npm install
 npm run dev
 ```
 
-`npm run dev` runs `npm run sync` first (see `predev` in package.json),
-which copies `../state/*.json`, the client/requirement registers, the
-amendment notices and the corpus notes into `public/data/` as static JSON.
-Re-run `npm run sync` (or just restart `npm run dev`) after running the CLI
-again to pick up new results — the browser only ever reads what's already
-on disk.
+Open the printed URL. `npm run dev` runs `npm run sync` first (see
+`predev` in package.json), which copies `../state/*.json`, the
+client/requirement registers, the amendment notices and the corpus notes
+into `public/data/` as static JSON — that's what the browser actually
+fetches.
+
+### Running commands from the browser
+
+Each tab (except RUN) has a button — "Run coverage check", "Generate all
+packs", "Seed version registry" / "Refresh consent matrix",
+"Detect and apply amendment" — that runs the real
+`npm run dev -- compliance --<command>` in the parent project, streams its
+output live, then re-runs `npm run sync` and refreshes the screen
+automatically. This is the *same* CLI a person would otherwise type by
+hand in a terminal — the button is a trigger, not a second implementation.
+It's wired through a dev-only Vite plugin
+([`vite-plugin-cli-runner.ts`](vite-plugin-cli-runner.ts), registered via
+`configureServer`, never `configurePreviewServer`), so the `/api/run`
+endpoint exists only under `npm run dev` — it is not present in
+`npm run build`'s output or `npm run preview`.
+
+You can still run any `compliance` command by hand in the parent directory
+and just click "refresh" (or re-run `npm run sync`) instead, if you'd
+rather drive it from the terminal.
 
 ## Screens
 

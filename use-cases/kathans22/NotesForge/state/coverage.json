@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-22T15:46:55.499Z",
+  "generated_at": "2026-08-22T17:57:59.578Z",
   "notes_dir": "./corpus/ria-compliance",
   "summary": {
     "EVIDENCED": 20,
@@ -538,7 +538,7 @@
       "requirement_id": "RIA-SUIT-01",
       "client_id": "CL-01",
       "status": "STALE",
-      "detail": "The risk profile (2022) is explicitly noted as overdue for renewal, making the advice rely on potentially outdated information.",
+      "detail": "The note explicitly states that the 2022 risk profile is overdue for renewal.",
       "evidence": [
         {
           "file": "suitability-notes-ananya-rao.md",
@@ -572,7 +572,7 @@
       "requirement_id": "RIA-SUIT-01",
       "client_id": "CL-07",
       "status": "STALE",
-      "detail": "The risk profile (2021) is explicitly noted as stale, and the advice relies on this outdated profile.",
+      "detail": "The note explicitly states that the 2021 risk profile is stale.",
       "evidence": [
         {
           "file": "suitability-notes-sanjay-mehta-huf.md",

@@ -1,3 +1,4 @@
+import { RunPanel } from "../components/RunPanel";
 import type { Artifacts } from "../useArtifacts";
 import type { AmendmentBatch, VersionStore } from "../types";
 
@@ -66,7 +67,7 @@ function RawBatch({ batch }: { batch: Extract<AmendmentBatch, { structured: fals
   );
 }
 
-export function Amendments({ data }: { data: Artifacts }) {
+export function Amendments({ data, reload }: { data: Artifacts; reload: () => void }) {
   const { amendments, versions } = data;
 
   return (
@@ -77,8 +78,14 @@ export function Amendments({ data }: { data: Artifacts }) {
         state/versions.json, not tracked separately here.
       </p>
 
+      <RunPanel
+        command="amend"
+        label="Detect and apply amendment (RIA-AI-01 → config/requirements-v2.yaml)"
+        onDone={reload}
+      />
+
       {amendments.length === 0 && (
-        <p className="state-message">No amendments on file yet — run `compliance --amend` and re-sync.</p>
+        <p className="state-message">No amendments on file yet — run the amendment check above.</p>
       )}
 
       {amendments.map((batch) =>

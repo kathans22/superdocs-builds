@@ -11,7 +11,7 @@ type Tab = (typeof TABS)[number];
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("COVERAGE");
-  const artifacts = useArtifacts();
+  const { state: artifacts, reload } = useArtifacts();
 
   return (
     <>
@@ -41,11 +41,11 @@ export default function App() {
         )}
         {artifacts.status === "ready" && (
           <>
-            {tab === "COVERAGE" && <Coverage data={artifacts.data} />}
-            {tab === "CLIENTS" && <Clients data={artifacts.data} />}
-            {tab === "PACKS" && <Packs data={artifacts.data} />}
-            {tab === "AMENDMENTS" && <Amendments data={artifacts.data} />}
-            {tab === "RUN" && <Run data={artifacts.data} />}
+            {tab === "COVERAGE" && <Coverage data={artifacts.data} reload={reload} />}
+            {tab === "CLIENTS" && <Clients data={artifacts.data} reload={reload} />}
+            {tab === "PACKS" && <Packs data={artifacts.data} reload={reload} />}
+            {tab === "AMENDMENTS" && <Amendments data={artifacts.data} reload={reload} />}
+            {tab === "RUN" && <Run data={artifacts.data} reload={reload} />}
           </>
         )}
       </main>

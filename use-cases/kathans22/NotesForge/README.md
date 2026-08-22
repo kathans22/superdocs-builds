@@ -118,7 +118,7 @@ SEBI's AI-disclosure obligations for investment advisers — the per-model trace
 
 ### UI console
 
-[`ui/`](ui/) is a small React/Vite console over the CLI's own output — five tabs (Coverage, Clients, Packs, Amendments, Run) reading `state/*.json`, `config/` and `out/` as static JSON (`npm run sync` in `ui/`, wired as `predev`/`prebuild`). It recomputes nothing: the coverage grid, the consent states, the pack manifests and the ops ledger are exactly what the CLI already wrote to disk. See [`ui/README.md`](ui/README.md).
+[`ui/`](ui/) is a small React/Vite console over the CLI's own output — five tabs (Coverage, Clients, Packs, Amendments, Run) reading `state/*.json`, `config/` and `out/` as static JSON (`npm run sync` in `ui/`, wired as `predev`/`prebuild`). It recomputes nothing: the coverage grid, the consent states, the pack manifests and the ops ledger are exactly what the CLI already wrote to disk. Each tab also has a button to run the matching `compliance` command directly from the browser (dev-only, via a small local server that just runs the same CLI and re-syncs — never a second implementation of the pipeline). See [`ui/README.md`](ui/README.md).
 
 Requirements down, clients across, every planted gap visible at a glance — from a real run against the seeded corpus, not a mockup:
 

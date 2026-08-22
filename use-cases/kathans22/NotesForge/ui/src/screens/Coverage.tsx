@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { EvidenceDrawer } from "../components/EvidenceDrawer";
+import { RunPanel } from "../components/RunPanel";
 import type { Artifacts } from "../useArtifacts";
 import type { CoverageEntry, CoverageStatus } from "../types";
 
@@ -10,7 +11,7 @@ const STATUS_LABEL: Record<CoverageStatus, string> = {
   INCONSISTENT: "CONFLICT",
 };
 
-export function Coverage({ data }: { data: Artifacts }) {
+export function Coverage({ data, reload }: { data: Artifacts; reload: () => void }) {
   const { requirements, clients, coverage } = data;
   const [selected, setSelected] = useState<CoverageEntry | null>(null);
 
@@ -41,9 +42,11 @@ export function Coverage({ data }: { data: Artifacts }) {
         <p className="panel-note">
           {coverage.generated_at
             ? `Generated ${new Date(coverage.generated_at).toLocaleString()} from ${coverage.notes_dir}`
-            : "No coverage run on file yet — run `compliance --coverage` and re-sync."}
+            : "No coverage run on file yet."}
           {" · "}click a cell for its source note and line.
         </p>
+
+        <RunPanel command="coverage" label="Run coverage check" onDone={reload} />
 
         <div style={{ overflowX: "auto" }}>
           <table>

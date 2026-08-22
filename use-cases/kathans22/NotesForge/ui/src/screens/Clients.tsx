@@ -1,3 +1,4 @@
+import { RunPanel } from "../components/RunPanel";
 import type { Artifacts } from "../useArtifacts";
 import type { ConsentCellStatus } from "../types";
 
@@ -17,7 +18,7 @@ const CONSENT_CLASS: Record<ConsentCellStatus, string> = {
   NOT_ISSUED: "MISSING",
 };
 
-export function Clients({ data }: { data: Artifacts }) {
+export function Clients({ data, reload }: { data: Artifacts; reload: () => void }) {
   const { clients, consentMatrix, coverage } = data;
 
   const riskEntryFor = (clientId: string) =>
@@ -30,6 +31,9 @@ export function Clients({ data }: { data: Artifacts }) {
         {clients.length} advisory client(s) · agreement version and consent state from{" "}
         {consentMatrix.generated_at ? new Date(consentMatrix.generated_at).toLocaleString() : "no matrix run yet"}.
       </p>
+
+      <RunPanel command="registry-seed" label="Seed version registry" onDone={reload} />
+      <RunPanel command="matrix" label="Refresh consent matrix" onDone={reload} />
 
       <table>
         <thead>

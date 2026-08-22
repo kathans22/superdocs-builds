@@ -1,3 +1,4 @@
+import { RunPanel } from "../components/RunPanel";
 import type { Artifacts } from "../useArtifacts";
 import type { CoverageStatus } from "../types";
 
@@ -6,7 +7,7 @@ function fileLabel(path: string): string {
   return parts[parts.length - 1] ?? path;
 }
 
-export function Packs({ data }: { data: Artifacts }) {
+export function Packs({ data, reload }: { data: Artifacts; reload: () => void }) {
   const { packs } = data;
 
   return (
@@ -18,8 +19,10 @@ export function Packs({ data }: { data: Artifacts }) {
         section's status is what state/coverage.json found at draft time, cited by requirement.
       </p>
 
+      <RunPanel command="generate" label="Generate all packs" onDone={reload} />
+
       {packs.packs.length === 0 && (
-        <p className="state-message">No packs on file yet — run `compliance --generate` and re-sync.</p>
+        <p className="state-message">No packs on file yet — run the generator above.</p>
       )}
 
       {packs.packs.map((p) => {
