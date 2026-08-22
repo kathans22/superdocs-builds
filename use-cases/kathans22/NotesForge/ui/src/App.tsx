@@ -3,7 +3,7 @@ import { Amendments } from "./screens/Amendments";
 import { Clients } from "./screens/Clients";
 import { Coverage } from "./screens/Coverage";
 import { Packs } from "./screens/Packs";
-import { Placeholder } from "./screens/Placeholder";
+import { Run } from "./screens/Run";
 import { useArtifacts } from "./useArtifacts";
 
 const TABS = ["COVERAGE", "CLIENTS", "PACKS", "AMENDMENTS", "RUN"] as const;
@@ -45,7 +45,7 @@ export default function App() {
             {tab === "CLIENTS" && <Clients data={artifacts.data} />}
             {tab === "PACKS" && <Packs data={artifacts.data} />}
             {tab === "AMENDMENTS" && <Amendments data={artifacts.data} />}
-            {tab === "RUN" && <Placeholder name="RUN" />}
+            {tab === "RUN" && <Run data={artifacts.data} />}
           </>
         )}
       </main>
