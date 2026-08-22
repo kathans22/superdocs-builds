@@ -4,10 +4,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { OpsLedger } from "../budget.js";
 import type { SuperDocsClient } from "../client.js";
+import type { Client } from "../domain/clients.js";
 import type { Requirement } from "../domain/requirements.js";
 import {
   currentVersion,
   latestClientVersion,
+  recordIssue,
   registerTemplateVersion,
   type TemplateVersion,
   type VersionStore,
@@ -259,4 +261,165 @@ Respond with ONLY the replacement clause body text — no heading, no markdown f
   await writeAmendedTemplateContent(templateId, newVersion.version, newContent);
 
   return newVersion;
+}
+
+export interface AmendmentNotice {
+  client_id: string;
+  client_name: string;
+  template_id: string;
+  requirement_id: string;
+  previous_version: string;
+  new_version: string;
+  citation: string;
+  previous_text: string;
+  new_text: string;
+  what_client_must_do: string;
+  what_did_not_change: string[];
+  consent_status: "pending";
+}
+
+/**
+ * A short notice, not a reissued pack: what changed, the previous and new
+ * text side by side, why (citation), what the client must do, and — just
+ * as important — what explicitly did not change. An officer scanning this
+ * needs the scope of a change as much as its content.
+ */
+export function buildAmendmentNotice(
+  client: Pick<Client, "id" | "name">,
+  templateId: string,
+  event: AmendmentEvent,
+  previousVersion: string,
+  newVersion: string,
+  previousClauseText: string,
+  newClauseText: string,
+): AmendmentNotice {
+  return {
+    client_id: client.id,
+    client_name: client.name,
+    template_id: templateId,
+    requirement_id: event.requirement_id,
+    previous_version: previousVersion,
+    new_version: newVersion,
+    citation: event.updated.citation,
+    previous_text: previousClauseText,
+    new_text: newClauseText,
+    what_client_must_do:
+      "Review the updated clause below and provide consent (see the consent block at the end of this notice). No other action is required.",
+    what_did_not_change: [
+      "Every other section of your agreement — scope of services, fees, conflicts of interest, term and termination, record keeping — is unchanged.",
+      "Your onboarding date, fee arrangement, and every other compliance record on file for you remain exactly as they were.",
+      "No client outside this notice's distribution was affected by this amendment.",
+    ],
+    consent_status: "pending",
+  };
+}
+
+export function formatAmendmentNotice(notice: AmendmentNotice): string {
+  return `AMENDMENT NOTICE — ${notice.client_name} (${notice.client_id})
+
+Template: ${notice.template_id}   Version: ${notice.previous_version} -> ${notice.new_version}
+Requirement: ${notice.requirement_id}
+Why: ${notice.citation}
+
+WHAT CHANGED
+
+Previous clause text:
+  "${notice.previous_text}"
+
+New clause text:
+  "${notice.new_text}"
+
+WHAT YOU MUST DO
+
+${notice.what_client_must_do}
+
+WHAT DID NOT CHANGE
+
+${notice.what_did_not_change.map((s) => `- ${s}`).join("\n")}
+
+CONSENT
+
+Status: ${notice.consent_status.toUpperCase()}
+By signing below, you acknowledge and consent to the updated clause above.
+
+Signed: ______________________   Date: ______________
+
+---
+DRAFT FOR PROFESSIONAL REVIEW — this notice is generated from source records and does not constitute compliance advice or certification.
+`;
+}
+
+export interface AmendmentResult {
+  event: AmendmentEvent;
+  scope: AmendmentScope;
+  newTemplateVersions: TemplateVersion[];
+  notices: AmendmentNotice[];
+}
+
+/**
+ * Ties AMEND, NOTIFY and RECORD together: for each affected template,
+ * drafts the amended clause once, then for each client who actually holds
+ * that template's current version — not the whole scope's client list,
+ * per template — records the new issuance (consent pending, per Prompt
+ * 4's writer) and builds their notice. A client outside the scope is
+ * never touched: recordIssue is only ever called for a client id that
+ * scopeAmendment or this function's own per-template holder check
+ * produced.
+ */
+export async function applyAmendment(
+  client: SuperDocsClient,
+  ledger: OpsLedger,
+  store: VersionStore,
+  clients: Client[],
+  event: AmendmentEvent,
+  effectiveFrom: string,
+  nextVersionLabel: string,
+): Promise<AmendmentResult> {
+  const scope = scopeAmendment(store, event);
+  const newTemplateVersions: TemplateVersion[] = [];
+  const notices: AmendmentNotice[] = [];
+
+  const clauseHeading = CLAUSE_HEADING_BY_REQUIREMENT[event.requirement_id];
+
+  for (const templateId of scope.affected_template_ids) {
+    const previousVersion = currentVersion(store, templateId);
+    if (!previousVersion) continue;
+
+    const previousContent = await readTemplateContent(templateId, previousVersion.version);
+    const previousClauseText = clauseHeading ? extractClauseBody(previousContent, clauseHeading) : "";
+
+    const newVersion = await amendTemplate(client, ledger, store, templateId, event, effectiveFrom, nextVersionLabel);
+    newTemplateVersions.push(newVersion);
+
+    const newContent = await readTemplateContent(templateId, newVersion.version);
+    const newClauseText = clauseHeading ? extractClauseBody(newContent, clauseHeading) : "";
+
+    const holderIds = new Set(
+      store.client_versions.filter((r) => r.template_id === templateId).map((r) => r.client_id),
+    );
+    const clientsOnPreviousVersion = Array.from(holderIds).filter(
+      (id) => latestClientVersion(store, id, templateId)?.version === previousVersion.version,
+    );
+
+    for (const clientId of clientsOnPreviousVersion) {
+      const clientRecord = clients.find((c) => c.id === clientId);
+      if (!clientRecord) continue;
+
+      recordIssue(store, clientId, templateId, newVersion.version, effectiveFrom);
+
+      notices.push(
+        buildAmendmentNotice(
+          clientRecord,
+          templateId,
+          event,
+          previousVersion.version,
+          newVersion.version,
+          previousClauseText,
+          newClauseText,
+        ),
+      );
+    }
+  }
+
+  return { event, scope, newTemplateVersions, notices };
 }

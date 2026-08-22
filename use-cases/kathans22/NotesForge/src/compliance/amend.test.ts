@@ -1,8 +1,39 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { rm } from "node:fs/promises";
+import { OpsLedger } from "../budget.js";
+import { SuperDocsClient } from "../client.js";
+import type { Client } from "../domain/clients.js";
+import { Logger } from "../logger.js";
 import type { Requirement } from "../domain/requirements.js";
-import { recordIssue, registerTemplateVersion, type VersionStore } from "./registry.js";
-import { detectAmendments, extractClauseBody, scopeAmendment, spliceClauseBody } from "./amend.js";
+import { latestClientVersion, recordIssue, registerTemplateVersion, type VersionStore } from "./registry.js";
+import { applyAmendment, detectAmendments, extractClauseBody, scopeAmendment, spliceClauseBody } from "./amend.js";
+import type { ChatResponse } from "../types.js";
+
+/** A real client instance with chat() stubbed — avoids the private-field
+ * issues of duck-typing SuperDocsClient, and never touches the network. */
+function fakeClient(replyText: string): SuperDocsClient {
+  const c = new SuperDocsClient("fake-key", new Logger(), null);
+  c.chat = async (): Promise<ChatResponse> => ({
+    response: replyText,
+    session_id: "fake-session",
+    document_changes: null,
+    usage: null,
+  });
+  return c;
+}
+
+function fakeClientRecord(id: string, name: string): Client {
+  return {
+    id,
+    name,
+    onboarded_on: "2020-01-01",
+    advisory_type: "individual",
+    ai_assisted: true,
+    agreement_version: "v2",
+    risk_profile_reviewed_on: null,
+  };
+}
 
 const SAMPLE_TEMPLATE = [
   "# Agreement",
@@ -147,4 +178,65 @@ test("scopeAmendment: a requirement no current template references has an empty 
   const scope = scopeAmendment(store, event);
   assert.deepEqual(scope.affected_template_ids, []);
   assert.deepEqual(scope.affected_client_ids, []);
+});
+
+test("applyAmendment: issues the new version and a notice only to clients on the affected version", async () => {
+  const store: VersionStore = { template_versions: [], client_versions: [] };
+  registerTemplateVersion(store, "ria-advisory-agreement", "v1", "2015-04-01", ["RIA-AGR-01"], "v1 placeholder");
+  registerTemplateVersion(
+    store,
+    "ria-advisory-agreement",
+    "v2",
+    "2023-01-01",
+    ["RIA-AGR-01", "RIA-AI-01"],
+    "v2 placeholder",
+  );
+
+  recordIssue(store, "CL-01", "ria-advisory-agreement", "v1", "2021-03-10"); // not on the affected version
+  recordIssue(store, "CL-02", "ria-advisory-agreement", "v2", "2023-06-15"); // affected
+  recordIssue(store, "CL-04", "ria-advisory-agreement", "v2", "2024-01-20"); // affected
+
+  const clients = [
+    fakeClientRecord("CL-01", "Ananya Rao"),
+    fakeClientRecord("CL-02", "Vikram Deshmukh"),
+    fakeClientRecord("CL-04", "Kunal Sharma"),
+  ];
+
+  const event = {
+    requirement_id: "RIA-AI-01",
+    kind: "changed_obligation" as const,
+    previous: req(),
+    updated: req({ obligation: "Extended obligation requiring per-model tracing." }),
+  };
+
+  const client = fakeClient("Stub amended clause body for testing.");
+  const ledger = new OpsLedger(new Logger(), 25);
+
+  try {
+    const result = await applyAmendment(client, ledger, store, clients, event, "2026-08-22", "v3-test");
+
+    assert.equal(result.newTemplateVersions.length, 1);
+    assert.equal(result.newTemplateVersions[0]!.version, "v3-test");
+    assert.equal(result.notices.length, 2);
+    assert.deepEqual(
+      result.notices.map((n) => n.client_id).sort(),
+      ["CL-02", "CL-04"],
+    );
+
+    // CL-01 (unaffected) got no new issuance at all — still on v1.
+    assert.equal(latestClientVersion(store, "CL-01", "ria-advisory-agreement")?.version, "v1");
+
+    // CL-02 (affected) now has a pending new issuance.
+    const cl02 = latestClientVersion(store, "CL-02", "ria-advisory-agreement");
+    assert.equal(cl02?.version, "v3-test");
+    assert.equal(cl02?.consented_on, null);
+    assert.equal(cl02?.consent_evidence, null);
+
+    const notice = result.notices.find((n) => n.client_id === "CL-02")!;
+    assert.equal(notice.consent_status, "pending");
+    assert.ok(notice.what_did_not_change.length > 0);
+    assert.match(notice.new_text, /Stub amended clause body for testing/);
+  } finally {
+    await rm("state/templates/ria-advisory-agreement-v3-test.md", { force: true });
+  }
 });
