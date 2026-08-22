@@ -1,9 +1,22 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { OpsLedger } from "./budget.js";
 import { SuperDocsClient } from "./client.js";
 import { CONFIG } from "./config.js";
-import { assessCoverage, formatCoverageReport } from "./compliance/coverage.js";
+import { assessCoverage, blockForClient, findInBlock, formatCoverageReport } from "./compliance/coverage.js";
 import { buildPlannedSections, generateCompliancePack } from "./compliance/generate.js";
 import { planCompliancePacks } from "./compliance/plan.js";
+import {
+  clientsBehind,
+  DEFAULT_VERSION_STORE_PATH,
+  loadVersionStore,
+  recordConsent,
+  recordIssue,
+  registerTemplateVersion,
+  saveVersionStore,
+} from "./compliance/registry.js";
+import { buildConsentMatrix, formatConsentMatrixTable } from "./compliance/report.js";
 import { verifyCompliancePack } from "./compliance/verify.js";
 import { resolveCredentials } from "./credentials.js";
 import type { Client } from "./domain/clients.js";
@@ -11,6 +24,10 @@ import { loadClients } from "./domain/clients.js";
 import { loadRequirements } from "./domain/requirements.js";
 import { Logger } from "./logger.js";
 import { readNotes, summariseNotes } from "./notes.js";
+
+const TEMPLATE_ID = "ria-advisory-agreement";
+const TEMPLATES_DIR = fileURLToPath(new URL("../config/templates", import.meta.url));
+const DEFAULT_CONSENT_MATRIX_PATH = fileURLToPath(new URL("../state/consent-matrix.json", import.meta.url));
 
 function getFlagValue(args: string[], flag: string): string | undefined {
   const idx = args.indexOf(flag);
@@ -140,6 +157,72 @@ async function runGenerate(args: string[]): Promise<void> {
   await logger.flush("compliance-generate-log.json");
 }
 
+/**
+ * Registers the two known template versions and, for every client, records
+ * their historical agreement issuance and (where the corpus documents a
+ * signed date) their consent — idempotent, so re-running never duplicates
+ * an issuance already on file. This is the one place the registry gets
+ * populated from the corpus; everything downstream (--matrix) only reads.
+ */
+async function runRegistrySeed(args: string[]): Promise<void> {
+  const notesDir = getFlagValue(args, "--notes") ?? "./corpus/ria-compliance";
+
+  const store = await loadVersionStore();
+
+  const v1Content = await readFile(path.join(TEMPLATES_DIR, "ria-advisory-agreement-v1.md"), "utf8");
+  const v2Content = await readFile(path.join(TEMPLATES_DIR, "ria-advisory-agreement-v2.md"), "utf8");
+  registerTemplateVersion(store, TEMPLATE_ID, "v1", "2015-04-01", ["RIA-AGR-01"], v1Content);
+  registerTemplateVersion(store, TEMPLATE_ID, "v2", "2023-01-01", ["RIA-AGR-01", "RIA-AI-01"], v2Content);
+
+  const clients = await loadClients();
+  const notes = await readNotes(notesDir);
+  const onboardingNote = notes.find((n) => n.name === "client-onboarding-notes.md");
+
+  let issued = 0;
+  let consented = 0;
+
+  for (const c of clients) {
+    const alreadyIssued = store.client_versions.some(
+      (r) => r.client_id === c.id && r.template_id === TEMPLATE_ID && r.version === c.agreement_version,
+    );
+    if (alreadyIssued) continue;
+
+    recordIssue(store, c.id, TEMPLATE_ID, c.agreement_version, c.onboarded_on);
+    issued++;
+
+    const block = onboardingNote ? blockForClient(onboardingNote, c.id) : null;
+    const evidence = block ? findInBlock(block, ["agreement"])[0] : undefined;
+    if (evidence) {
+      recordConsent(store, c.id, TEMPLATE_ID, c.agreement_version, c.onboarded_on, `${evidence.file}:${evidence.line}`);
+      consented++;
+    } else {
+      console.warn(`[WARN] runRegistrySeed: no agreement-signing evidence found for ${c.id} — issued without consent recorded`);
+    }
+  }
+
+  await saveVersionStore(store);
+  console.log(`[OK] registry seeded: ${issued} new issuance(s), ${consented} consent(s) recorded`);
+  console.log(`[INFO] store written to ${DEFAULT_VERSION_STORE_PATH}`);
+}
+
+async function runMatrix(): Promise<void> {
+  const store = await loadVersionStore();
+  const clients = await loadClients();
+  const matrix = buildConsentMatrix(store, clients);
+
+  console.log(formatConsentMatrixTable(matrix));
+
+  const behind = clientsBehind(store, TEMPLATE_ID);
+  console.log(`\n${behind.length} client(s) behind on ${TEMPLATE_ID}:`);
+  for (const b of behind) {
+    console.log(`  ${b.client_id}: issued ${b.version} (current: ${b.current_version}) — ${b.reason}`);
+  }
+
+  await mkdir(path.dirname(DEFAULT_CONSENT_MATRIX_PATH), { recursive: true });
+  await writeFile(DEFAULT_CONSENT_MATRIX_PATH, `${JSON.stringify(matrix, null, 2)}\n`, "utf8");
+  console.log(`\n[INFO] matrix written to ${DEFAULT_CONSENT_MATRIX_PATH}`);
+}
+
 export async function runComplianceCli(args: string[]): Promise<void> {
   if (args.includes("--list-requirements")) {
     await listRequirements();
@@ -161,8 +244,18 @@ export async function runComplianceCli(args: string[]): Promise<void> {
     return;
   }
 
+  if (args.includes("--registry-seed")) {
+    await runRegistrySeed(args);
+    return;
+  }
+
+  if (args.includes("--matrix")) {
+    await runMatrix();
+    return;
+  }
+
   console.log(
-    "compliance: no recognised command. Try --list-requirements, --list-clients, --coverage or --generate.",
+    "compliance: no recognised command. Try --list-requirements, --list-clients, --coverage, --generate, --registry-seed or --matrix.",
   );
   process.exitCode = 1;
 }

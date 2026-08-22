@@ -1,0 +1,120 @@
+{
+  "generated_at": "2026-08-22T12:03:40.496Z",
+  "templates": [
+    "ria-advisory-agreement"
+  ],
+  "rows": [
+    {
+      "client_id": "CL-01",
+      "client_name": "Ananya Rao",
+      "cells": [
+        {
+          "template_id": "ria-advisory-agreement",
+          "version": "v1",
+          "current_version": "v2",
+          "status": "BEHIND",
+          "consented_on": "2021-03-10",
+          "consent_evidence": "client-onboarding-notes.md:6"
+        }
+      ]
+    },
+    {
+      "client_id": "CL-02",
+      "client_name": "Vikram Deshmukh",
+      "cells": [
+        {
+          "template_id": "ria-advisory-agreement",
+          "version": "v2",
+          "current_version": "v2",
+          "status": "CURRENT_CONSENTED",
+          "consented_on": "2023-06-15",
+          "consent_evidence": "client-onboarding-notes.md:12"
+        }
+      ]
+    },
+    {
+      "client_id": "CL-03",
+      "client_name": "Meera Family Trust",
+      "cells": [
+        {
+          "template_id": "ria-advisory-agreement",
+          "version": "v1",
+          "current_version": "v2",
+          "status": "BEHIND",
+          "consented_on": "2020-11-02",
+          "consent_evidence": "client-onboarding-notes.md:19"
+        }
+      ]
+    },
+    {
+      "client_id": "CL-04",
+      "client_name": "Kunal Sharma",
+      "cells": [
+        {
+          "template_id": "ria-advisory-agreement",
+          "version": "v2",
+          "current_version": "v2",
+          "status": "CURRENT_CONSENTED",
+          "consented_on": "2024-01-20",
+          "consent_evidence": "client-onboarding-notes.md:27"
+        }
+      ]
+    },
+    {
+      "client_id": "CL-05",
+      "client_name": "Rohan Textiles Pvt Ltd",
+      "cells": [
+        {
+          "template_id": "ria-advisory-agreement",
+          "version": "v1",
+          "current_version": "v2",
+          "status": "BEHIND",
+          "consented_on": "2022-09-05",
+          "consent_evidence": "client-onboarding-notes.md:33"
+        }
+      ]
+    },
+    {
+      "client_id": "CL-06",
+      "client_name": "Priya Nair",
+      "cells": [
+        {
+          "template_id": "ria-advisory-agreement",
+          "version": "v2",
+          "current_version": "v2",
+          "status": "CURRENT_CONSENTED",
+          "consented_on": "2025-02-11",
+          "consent_evidence": "client-onboarding-notes.md:40"
+        }
+      ]
+    },
+    {
+      "client_id": "CL-07",
+      "client_name": "Sanjay Mehta HUF",
+      "cells": [
+        {
+          "template_id": "ria-advisory-agreement",
+          "version": "v1",
+          "current_version": "v2",
+          "status": "BEHIND",
+          "consented_on": "2019-07-01",
+          "consent_evidence": "client-onboarding-notes.md:47"
+        }
+      ]
+    },
+    {
+      "client_id": "CL-08",
+      "client_name": "Ishaan Kapoor",
+      "cells": [
+        {
+          "template_id": "ria-advisory-agreement",
+          "version": "v2",
+          "current_version": "v2",
+          "status": "CURRENT_CONSENTED",
+          "consented_on": "2025-08-01",
+          "consent_evidence": "client-onboarding-notes.md:55"
+        }
+      ]
+    }
+  ]
+}

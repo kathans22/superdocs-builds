@@ -194,7 +194,7 @@ export function recordConsent(
 }
 
 /** A client's most recent issuance of a given template, by issued_on. */
-function latestRecordFor(
+export function latestClientVersion(
   store: VersionStore,
   clientId: string,
   templateId: string,
@@ -212,7 +212,7 @@ export function clientsOnVersion(store: VersionStore, templateId: string, versio
   );
   const onVersion: string[] = [];
   for (const clientId of clientIds) {
-    if (latestRecordFor(store, clientId, templateId)?.version === version) onVersion.push(clientId);
+    if (latestClientVersion(store, clientId, templateId)?.version === version) onVersion.push(clientId);
   }
   return onVersion.sort();
 }
@@ -241,7 +241,7 @@ export function clientsBehind(store: VersionStore, templateId: string): BehindEn
   const behind: BehindEntry[] = [];
 
   for (const clientId of clientIds) {
-    const latest = latestRecordFor(store, clientId, templateId);
+    const latest = latestClientVersion(store, clientId, templateId);
     if (!latest) continue;
 
     const outdated = latest.version !== current.version;

@@ -191,7 +191,7 @@ export function assessCoverageDeterministic(
 // each file into those blocks once, then search only within the block that
 // belongs to the client being assessed — never across client boundaries.
 
-interface ClientBlock {
+export interface ClientBlock {
   file: string;
   startLine: number;
   lines: string[];
@@ -216,7 +216,7 @@ function splitIntoClientBlocks(note: NoteFile): ClientBlock[] | null {
   return blocks;
 }
 
-function blockForClient(note: NoteFile, clientId: string): ClientBlock | null {
+export function blockForClient(note: NoteFile, clientId: string): ClientBlock | null {
   const blocks = splitIntoClientBlocks(note);
   if (!blocks) return null;
   return (
@@ -226,7 +226,7 @@ function blockForClient(note: NoteFile, clientId: string): ClientBlock | null {
   );
 }
 
-function findInBlock(block: ClientBlock, keywords: string[]): EvidenceRef[] {
+export function findInBlock(block: ClientBlock, keywords: string[]): EvidenceRef[] {
   const hits: EvidenceRef[] = [];
   block.lines.forEach((line, offset) => {
     const lower = line.toLowerCase();
