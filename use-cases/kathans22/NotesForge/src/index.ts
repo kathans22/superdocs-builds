@@ -1,5 +1,6 @@
 import { OpsLedger } from "./budget.js";
 import { SuperDocsClient } from "./client.js";
+import { runComplianceCli } from "./compliance.js";
 import { CONFIG } from "./config.js";
 import { resolveCredentials } from "./credentials.js";
 import { type ExportFormat, exportReport } from "./export.js";
@@ -16,6 +17,11 @@ function getFlagValue(args: string[], flag: string): string | undefined {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const logger = new Logger();
+
+  if (args[0] === "compliance") {
+    await runComplianceCli(args.slice(1));
+    return;
+  }
 
   if (args.includes("--whoami")) {
     const creds = await resolveCredentials(logger);
