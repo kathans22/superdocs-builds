@@ -580,8 +580,13 @@ export function canonicalSectionHeading(requirementTitle: string, entry: Coverag
   if (entry.evidence.length === 0) {
     return `${requirementTitle} — ${label}`;
   }
-  const files = Array.from(new Set(entry.evidence.map((e) => e.file)));
-  return `${requirementTitle} — ${label} (${files.join(", ")})`;
+  // Cite one representative file, not every file evidence touched — the
+  // prompt asks that a claim cite "a source note" (singular), and a long
+  // multi-file parenthetical risks the heading being truncated somewhere
+  // in the document platform, which would silently strip the citation
+  // verify.ts is checking for.
+  const file = entry.evidence[0]!.file;
+  return `${requirementTitle} — ${label} (${file})`;
 }
 
 export function formatCoverageReport(
