@@ -6,7 +6,15 @@ import { SuperDocsClient } from "../client.js";
 import type { Client } from "../domain/clients.js";
 import { Logger } from "../logger.js";
 import type { Requirement } from "../domain/requirements.js";
-import { latestClientVersion, recordIssue, registerTemplateVersion, type VersionStore } from "./registry.js";
+import { loadClients } from "../domain/clients.js";
+import { loadRequirements } from "../domain/requirements.js";
+import {
+  latestClientVersion,
+  recordConsent,
+  recordIssue,
+  registerTemplateVersion,
+  type VersionStore,
+} from "./registry.js";
 import { applyAmendment, detectAmendments, extractClauseBody, scopeAmendment, spliceClauseBody } from "./amend.js";
 import type { ChatResponse } from "../types.js";
 
@@ -236,6 +244,90 @@ test("applyAmendment: issues the new version and a notice only to clients on the
     assert.equal(notice.consent_status, "pending");
     assert.ok(notice.what_did_not_change.length > 0);
     assert.match(notice.new_text, /Stub amended clause body for testing/);
+  } finally {
+    await rm("state/templates/ria-advisory-agreement-v3-test.md", { force: true });
+  }
+});
+
+// --- The centerpiece: unaffected clients are provably untouched ---------
+//
+// Not "should be" untouched by inspection — this asserts it, against the
+// real corpus's requirements diff and the full 8-client roster, by
+// snapshotting every non-AI client's client_versions rows as JSON strings
+// before the amendment and requiring byte-for-byte string equality after.
+
+test("amendment: unaffected (non-AI) clients are byte-identical before and after; only AI-assisted clients receive notices", async () => {
+  const requirements = await loadRequirements();
+  const updatedRequirements = await loadRequirements("./config/requirements-v2.yaml");
+  const clients = await loadClients();
+
+  const events = detectAmendments(requirements, updatedRequirements);
+  assert.equal(events.length, 1, "the real requirements diff should produce exactly one amendment event");
+  const event = events[0]!;
+  assert.equal(event.requirement_id, "RIA-AI-01");
+
+  // Reconstruct the store in the same shape the real seed produces: v1
+  // (agreement only, superseded) and v2 (agreement + AI clause, current),
+  // every real client issued and consented at their real agreement_version.
+  const store: VersionStore = { template_versions: [], client_versions: [] };
+  registerTemplateVersion(store, "ria-advisory-agreement", "v1", "2015-04-01", ["RIA-AGR-01"], "v1 placeholder");
+  registerTemplateVersion(
+    store,
+    "ria-advisory-agreement",
+    "v2",
+    "2023-01-01",
+    ["RIA-AGR-01", "RIA-AI-01"],
+    "v2 placeholder",
+  );
+  for (const c of clients) {
+    recordIssue(store, c.id, "ria-advisory-agreement", c.agreement_version, c.onboarded_on);
+    recordConsent(store, c.id, "ria-advisory-agreement", c.agreement_version, c.onboarded_on, "seed-evidence.md:1");
+  }
+
+  const scope = scopeAmendment(store, event);
+  const affectedIds = new Set(scope.affected_client_ids);
+  const unaffectedClients = clients.filter((c) => !affectedIds.has(c.id));
+
+  // The scoping mechanism (template-holding), not a hardcoded ai_assisted
+  // filter, is what produced this split — confirm it lines up with reality
+  // rather than assuming it.
+  assert.deepEqual(
+    unaffectedClients.map((c) => c.id).sort(),
+    clients.filter((c) => !c.ai_assisted).map((c) => c.id).sort(),
+  );
+  assert.ok(unaffectedClients.length > 0 && affectedIds.size > 0, "test is vacuous unless both groups are non-empty");
+
+  // Byte-identical snapshot of every unaffected client's rows, taken before
+  // anything runs.
+  const before = new Map(
+    unaffectedClients.map((c) => [c.id, JSON.stringify(store.client_versions.filter((r) => r.client_id === c.id))]),
+  );
+
+  const client = fakeClient("Stub amended clause body reflecting the per-model tracing requirement.");
+  const ledger = new OpsLedger(new Logger(), 25);
+
+  try {
+    const result = await applyAmendment(client, ledger, store, clients, event, "2026-08-22", "v3-test");
+
+    // Only AI-assisted clients received a notice.
+    assert.deepEqual(result.notices.map((n) => n.client_id).sort(), scope.affected_client_ids);
+    assert.ok(result.notices.every((n) => clients.find((c) => c.id === n.client_id)?.ai_assisted === true));
+
+    // The proof: every unaffected client's rows serialize to the exact
+    // same JSON string after the amendment as before it.
+    for (const c of unaffectedClients) {
+      const after = JSON.stringify(store.client_versions.filter((r) => r.client_id === c.id));
+      assert.equal(after, before.get(c.id), `${c.id}'s client_versions rows changed but should be byte-identical`);
+    }
+
+    // Not vacuous: the affected clients' rows DID change, into the new
+    // version with consent pending.
+    for (const clientId of scope.affected_client_ids) {
+      const latest = latestClientVersion(store, clientId, "ria-advisory-agreement");
+      assert.equal(latest?.version, "v3-test");
+      assert.equal(latest?.consented_on, null);
+      assert.equal(latest?.consent_evidence, null);
+    }
   } finally {
     await rm("state/templates/ria-advisory-agreement-v3-test.md", { force: true });
   }
