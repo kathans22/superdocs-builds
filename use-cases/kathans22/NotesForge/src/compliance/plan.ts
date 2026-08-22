@@ -47,6 +47,81 @@ export function stripJsonFences(text: string): string {
 }
 
 /**
+ * Scans from the first `{` and returns the substring up to (and including)
+ * the matching close brace — respecting string literals so a `}` inside a
+ * quoted value doesn't end the scan early. Returns null if the braces never
+ * balance. Used to recover a response that is otherwise valid JSON but has
+ * trailing garbage appended after the real close.
+ */
+export function extractBalancedJson(text: string): string | null {
+  const start = text.indexOf("{");
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]!;
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Parses a model's JSON reply defensively, in increasing order of effort:
+ *  1. Fence-stripped direct parse.
+ *  2. If that parses to a plain string, parse again — a genuine
+ *     double-encoded payload (the whole object re-wrapped as a JSON
+ *     string).
+ *  3. If direct parse throws, extract the first balanced top-level
+ *     `{...}` and parse that instead.
+ *
+ * Step 3 exists because of an observed live failure mode that isn't
+ * double-encoding: the model's response is a complete, valid JSON object
+ * with a stray `"}` appended after the real closing brace — roughly half
+ * the time on a large outline response, confirmed by dumping the raw bytes
+ * (see evidence/bugs/BUG-002). Discarding an otherwise-correct response
+ * over two trailing characters is worse than recovering it.
+ */
+export function parseJsonLoosely<T>(raw: string): T {
+  const cleaned = stripJsonFences(raw);
+
+  const parseMaybeDoubleEncoded = (text: string): T => {
+    let value: unknown = JSON.parse(text);
+    if (typeof value === "string") {
+      value = JSON.parse(value);
+    }
+    return value as T;
+  };
+
+  try {
+    return parseMaybeDoubleEncoded(cleaned);
+  } catch {
+    const balanced = extractBalancedJson(cleaned);
+    if (balanced === null) {
+      throw new Error("no balanced JSON object found in response");
+    }
+    return parseMaybeDoubleEncoded(balanced);
+  }
+}
+
+/**
  * This is a DRAFT outline only — which requirements look applicable to
  * which client, and which notes plausibly evidence them. It is not the
  * compliance determination: coverage.ts runs independently afterwards and
@@ -106,10 +181,9 @@ ${notesDigest}`;
     model_tier: "core",
   });
 
-  const cleaned = stripJsonFences(response.response);
   let parsed: RawCompliancePlanResponse;
   try {
-    parsed = JSON.parse(cleaned) as RawCompliancePlanResponse;
+    parsed = parseJsonLoosely<RawCompliancePlanResponse>(response.response);
   } catch {
     console.error(`[ERROR] planCompliancePacks: AI response was not valid JSON:\n${response.response}`);
     throw new CompliancePlanParseError(

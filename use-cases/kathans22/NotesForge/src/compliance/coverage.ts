@@ -3,7 +3,7 @@ import type { SuperDocsClient } from "../client.js";
 import type { NoteFile } from "../notes.js";
 import type { Client } from "../domain/clients.js";
 import type { Requirement } from "../domain/requirements.js";
-import { stripJsonFences } from "./plan.js";
+import { parseJsonLoosely } from "./plan.js";
 
 export type CoverageStatus = "EVIDENCED" | "STALE" | "MISSING" | "INCONSISTENT";
 
@@ -496,7 +496,7 @@ ${candidates.map((c) => `--- ${c.client.id} (${c.client.name}) ---\n${c.excerpt}
 
   let judgments: SuitabilityJudgment[];
   try {
-    const parsed = JSON.parse(stripJsonFences(response.response)) as { judgments: SuitabilityJudgment[] };
+    const parsed = parseJsonLoosely<{ judgments: SuitabilityJudgment[] }>(response.response);
     judgments = parsed.judgments;
   } catch {
     console.warn(
