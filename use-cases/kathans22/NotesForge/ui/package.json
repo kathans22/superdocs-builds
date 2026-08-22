@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "sync": "tsx scripts/sync-artifacts.ts",
-    "predev": "npm run sync",
+    "predev": "npm install --no-audit --no-fund && npm run sync",
     "dev": "vite",
-    "prebuild": "npm run sync",
+    "prebuild": "npm install --no-audit --no-fund && npm run sync",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"

@@ -8,15 +8,15 @@ no recomputation. Everything it shows is `state/*.json`, `config/` and
 
 ```bash
 cd ui
-npm install
 npm run dev
 ```
 
-Open the printed URL. `npm run dev` runs `npm run sync` first (see
-`predev` in package.json), which copies `../state/*.json`, the
-client/requirement registers, the amendment notices and the corpus notes
-into `public/data/` as static JSON — that's what the browser actually
-fetches.
+That's the whole setup — no separate `npm install` step. `predev`
+installs dependencies (a no-op if already installed) and runs
+`npm run sync`, which copies `../state/*.json`, the client/requirement
+registers, the amendment notices and the corpus notes into `public/data/`
+as static JSON — that's what the browser actually fetches. Open the
+printed URL and you're looking at real data from the first paint.
 
 ### Running commands from the browser
 
