@@ -161,7 +161,19 @@ async function runGenerate(args: string[]): Promise<void> {
     const plannedSections = buildPlannedSections(outline, coverageEntries, requirements);
 
     logger.step(`generating pack for ${c.id} (${c.name})`);
-    const draft = await generateCompliancePack(client, ledger, c, outline, plannedSections);
+    let draft;
+    try {
+      draft = await generateCompliancePack(client, ledger, c, outline, plannedSections);
+    } catch (err) {
+      // One client's job flaking (e.g. a session that completed without a
+      // focused document) must not lose every other client's already-drafted
+      // pack — log it and move on; the manifest below still records whoever
+      // succeeded, and a retry with --clients can pick up just this one.
+      console.warn(
+        `[WARN] ${c.id}: pack generation failed — ${err instanceof Error ? err.message : String(err)} — skipping`,
+      );
+      continue;
+    }
     console.log(`[OK] pack drafted: ${draft.durableDocumentId ?? draft.documentId}`);
 
     let verified = false;
