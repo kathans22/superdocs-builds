@@ -7,6 +7,16 @@ function fileLabel(path: string): string {
   return parts[parts.length - 1] ?? path;
 }
 
+/**
+ * exportedFiles holds the CLI's own absolute filesystem paths (whatever
+ * host it ran on) — not something a browser can link to. `npm run sync`
+ * separately copies ../out/ into ui/public/out/, which Vite serves at the
+ * site root, so the actual download URL is just /out/<client_id>/<filename>.
+ */
+function downloadUrl(clientId: string, path: string): string {
+  return `/out/${encodeURIComponent(clientId)}/${encodeURIComponent(fileLabel(path))}`;
+}
+
 export function Packs({ data, reload }: { data: Artifacts; reload: () => void }) {
   const { packs } = data;
 
@@ -58,7 +68,9 @@ export function Packs({ data, reload }: { data: Artifacts; reload: () => void })
               <ul style={{ margin: 0, paddingLeft: "1.1rem", fontSize: "0.82rem" }}>
                 {p.exportedFiles.map((f) => (
                   <li key={f} className="mono">
-                    {fileLabel(f)}
+                    <a href={downloadUrl(p.client_id, f)} download>
+                      {fileLabel(f)}
+                    </a>
                   </li>
                 ))}
               </ul>

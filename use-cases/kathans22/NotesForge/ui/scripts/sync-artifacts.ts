@@ -6,7 +6,7 @@
  * the CLI itself uses — nothing is recomputed. Run after a CLI command, then
  * `npm run dev` in ui/ to view the result.
  */
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadClients } from "../../src/domain/clients.js";
@@ -14,6 +14,8 @@ import { loadRequirements } from "../../src/domain/requirements.js";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const OUT_DIR = fileURLToPath(new URL("../public/data", import.meta.url));
+const EXPORTED_PACKS_SRC = path.join(ROOT, "out");
+const EXPORTED_PACKS_DEST = fileURLToPath(new URL("../public/out", import.meta.url));
 
 async function writeJson(name: string, data: unknown): Promise<void> {
   await writeFile(path.join(OUT_DIR, name), `${JSON.stringify(data, null, 2)}\n`, "utf8");
@@ -107,6 +109,22 @@ async function collectCorpusNotes(): Promise<Record<string, string>> {
   return notes;
 }
 
+/**
+ * Copies ../out/ into public/out/ so the browser can actually download an
+ * exported pack — Vite serves everything under public/ at the site root,
+ * so out/CL-01/foo.docx becomes /out/CL-01/foo.docx. The destination is
+ * wiped first so a pack removed from ../out/ doesn't linger as a stale,
+ * unlisted download.
+ */
+async function copyExportedPacks(): Promise<void> {
+  await rm(EXPORTED_PACKS_DEST, { recursive: true, force: true });
+  try {
+    await cp(EXPORTED_PACKS_SRC, EXPORTED_PACKS_DEST, { recursive: true });
+  } catch (err) {
+    if (!isEnoent(err)) throw err;
+  }
+}
+
 async function main(): Promise<void> {
   await mkdir(OUT_DIR, { recursive: true });
 
@@ -139,6 +157,8 @@ async function main(): Promise<void> {
 
   const corpusNotes = await collectCorpusNotes();
   await writeJson("corpus-notes.json", corpusNotes);
+
+  await copyExportedPacks();
 
   console.log(
     `[OK] synced ${clients.length} client(s), ${requirements.length} requirement(s), ${packs.packs.length} pack(s), ${amendments.length} amendment event(s), ${Object.keys(corpusNotes).length} corpus note(s) into ui/public/data/`,
