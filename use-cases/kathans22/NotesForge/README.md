@@ -47,24 +47,21 @@ A full run — plan, generate, verify, finish, export — costs on the order of 
 
 ## RIA Compliance Packs
 
-An extension of the same engine, specialised for a narrower and higher-stakes job: turning a folder of SEBI Registered Investment Adviser compliance notes into per-client compliance packs, traceable to the specific regulatory requirement each section evidences.
+An extension of the same engine, specialised for a narrower and higher-stakes job. Point a folder of SEBI Registered Investment Adviser compliance notes at it and it produces a per-client compliance pack, traceable section-by-section to the specific regulatory requirement it evidences, backed by an honest coverage report. A version-and-consent trail tracks who is on which template and who has actually consented to it, so that when a requirement's text changes, the system knows exactly which clients are affected and issues a targeted amendment instead of reissuing everything.
 
-> **This produces drafts for a compliance professional to review. It does not produce compliance, does not certify anything, and does not imply it does.**
+> **This produces drafts for a compliance professional to review. It does not produce compliance, does not certify anything, and does not imply it does.** Meridian Advisory Services holds no certification this tool claims on its behalf, and none should be inferred from any document it generates.
 
-Every generated pack opens with, verbatim:
+Every generated pack and amendment notice opens with, verbatim:
 
-> DRAFT FOR PROFESSIONAL REVIEW — this document is generated from source notes and does not constitute compliance advice or certification.
-
-**Everything invented, one thing real.** The firm (Meridian Advisory Services), its people, clients and figures are all fictional — see [`corpus/MANIFEST.md`](corpus/MANIFEST.md). The seven requirements in [`config/requirements.yaml`](config/requirements.yaml) are real SEBI (Investment Advisers) Regulations, 2013 obligations, citation-checked against actual regulation numbers (including the 2024 amendment inserting Regulation 15(14)/18(9) for AI-tool usage) rather than invented — fabricating the regulation would make the exercise meaningless. Nothing here is legal advice, and no certification is claimed anywhere in the tool or this document.
+> DRAFT FOR PROFESSIONAL REVIEW — this document is generated from source notes/records and does not constitute compliance advice or certification.
 
 ### Quickstart
 
 ```bash
-npm run dev -- compliance --list-requirements   # the SEBI requirements register, with citations
-npm run dev -- compliance --list-clients        # the invented advisory client roster
-npm run dev -- compliance --coverage            # EVIDENCED / STALE / MISSING / INCONSISTENT per requirement
-npm run dev -- compliance --generate --clients CL-04   # plan, draft and verify one client's pack
+SUPERDOCS_API_KEY=your-key-here npm run dev -- compliance --coverage
 ```
+
+That one command resolves credentials (self-signs up on first run if `SUPERDOCS_API_KEY` isn't set and no saved key exists yet), reads [`corpus/ria-compliance/`](corpus/ria-compliance/), and prints an `EVIDENCED`/`STALE`/`MISSING`/`INCONSISTENT` line for every (requirement, client) pair — the same grid the [UI console](#ui-console) renders visually (screenshot below). Everything else — drafting packs, seeding the version registry, running an amendment — is one more `compliance` subcommand away; see Flags below.
 
 ### Flags
 
@@ -73,11 +70,59 @@ npm run dev -- compliance --generate --clients CL-04   # plan, draft and verify 
 | `compliance --list-requirements` | Print the requirements register (id, frequency, scope, citation) |
 | `compliance --list-clients` | Print the client roster (AI-assisted flag, agreement version, last risk review) |
 | `compliance --coverage` | Run the coverage engine and print a status line per (requirement, client) |
-| `compliance --generate` | Plan outlines, assess coverage, draft and verify one pack per client |
+| `compliance --generate` | Plan outlines, assess coverage, draft, verify and export one pack per client |
+| `compliance --registry-seed` | Populate the version/consent store from the templates and corpus (idempotent) |
+| `compliance --matrix` | Print and persist the client × template consent matrix |
+| `compliance --amend` | Run DETECT → SCOPE → AMEND → NOTIFY → RECORD against a changed requirements register |
 | `--notes <dir>` | Notes folder for compliance mode (default `./corpus/ria-compliance`) |
 | `--clients <csv>` | Restrict `--generate` to specific client ids, e.g. `CL-01,CL-04` (default: every client) |
 | `--today <YYYY-MM-DD>` | Override "today" for staleness arithmetic — useful for reproducible runs (default: now) |
+| `--out <dir>` / `--formats <csv>` | Export destination/formats for `--generate` (default `./out`, `docx,pdf`) |
+| `--no-export` | Skip exporting packs to disk (drafting and verification still run) |
+| `--new-requirements <path>` | Register to detect an amendment against, for `--amend` (default `./config/requirements-v2.yaml`) |
+| `--effective-from <date>` | Effective date recorded on an amendment's new template version and notices (default: today) |
+| `--no-regen-comparison` | Skip `--amend`'s side-by-side full-regeneration ops comparison |
 | `--ops-cap <n>` | Same hard per-run cap as the base pipeline (default 25) |
+
+### SuperDocs features used
+
+- **`chat`** — one-shot calls: per-client pack outline planning (batched for the whole roster in one call), the single narrow suitability-staleness judgment (batched across every ambiguous client), and a single-clause amendment redraft.
+- **`chat/async` + job polling** — pack drafting goes through the same async-job pattern as the base pipeline, for the same reason: a multi-section draft can run past the sync gateway's timeout. Polling distinguishes a `continue_prompt` pause (resumed automatically) from a genuine human-in-the-loop approval pause (surfaced, never silently resolved) — this pipeline hasn't hit a live approval pause of the second kind, so `approve_change` isn't exercised by compliance mode specifically; it's part of the same `SuperDocsClient` the base pipeline uses.
+- **Free structure reads (`GET /v1/documents/{id}`)** — verification checks every planned section landed, and that every non-MISSING section still carries its citation, by reading `structure` (headings only), never spending an export just to look.
+- **`response_mode: 'compact'`** — pack generation and its polling use compact mode: per-section `chunk_diffs` instead of full document HTML.
+- **Batched multi-section edits** — one client's whole pack (up to five sections) is one `chat/async` request, billed once; one amendment's clause redraft is one `chat` request regardless of how many clients it fans out notices to afterward.
+- **Pre-signed export (`request_download_url`)** — every generated pack exports to `out/<client_id>/` in docx and pdf, streamed straight from the pre-signed URL to disk; this call is a free read, so exporting costs nothing against the ops budget.
+- **Agent credential reuse** — the same `resolveCredentials()` the base pipeline uses; compliance mode never signs up a second account.
+
+Notes are inlined directly into the chat message, not uploaded as documents — the compliance corpus is nine small text files, well under the pre-signed-upload threshold the base pipeline reserves for larger inputs. `request_upload_url` is exercised by the base report pipeline, not by compliance mode.
+
+### Why this use case
+
+SEBI's AI-disclosure obligations for investment advisers — the per-model traceability and audit-trail language in Regulation 15(14) and 18(9), inserted by the SEBI (Investment Advisers) (Second Amendment) Regulations, 2024 — are a document set that plainly did not exist eighteen months before this was built, and it's wired in as `RIA-AI-01`. A firm using AI-assisted advice has to keep that requirement's own AI-usage documentation in sync with the advice actually being given, and with whatever the requirement says next. This build exists to answer a real question about that posture: when the compliance ground moves, does the system re-verify everything, or does it re-verify exactly what changed? [`config/requirements-v2.yaml`](config/requirements-v2.yaml) — a further tightening of `RIA-AI-01`'s obligation — exists so `compliance --amend` can answer that question against a real, executed run, not a hypothetical. See [Operation economics](#operation-economics) for what that run actually cost.
+
+### Version and consent registry
+
+`compliance --registry-seed` populates `state/versions.json` from the two hand-authored template versions in [`config/templates/`](config/templates/) and each client's `agreement_version`/onboarding date, recording a consent only where the corpus actually evidences a signed date — a client with no such evidence is issued but left unconsented, never guessed into consent. `compliance --matrix` renders the resulting client × template consent matrix (`CURRENT_CONSENTED` / `CURRENT_PENDING_CONSENT` / `BEHIND` / `BEHIND_NOT_CONSENTED` / `NOT_ISSUED`) and writes it to `state/consent-matrix.json`. Template versions are identified by a SHA-256 hash of their content ([`registerTemplateVersion`](src/compliance/registry.ts)), not a version label someone typed — the same content registered under two different labels is the same version. [`recordConsent`](src/compliance/registry.ts) refuses to set `consented_on` without a `consent_evidence` reference: a consent without evidence is not a consent, enforced in the one writer, not left to every caller to remember.
+
+### Amendment flow
+
+`compliance --amend` runs DETECT → SCOPE → AMEND → NOTIFY → RECORD against a new requirements register (`--new-requirements`, default [`config/requirements-v2.yaml`](config/requirements-v2.yaml)):
+
+1. **DETECT** ([`detectAmendments`](src/compliance/amend.ts)) compares the new register against the last snapshot in `state/requirements-snapshot.json` (bootstrapped from `config/requirements.yaml` on first use) by content hash — a requirement is either byte-for-byte the same as what state last recorded or it isn't; no model call, no judgment.
+2. **SCOPE** ([`scopeAmendment`](src/compliance/amend.ts)) finds which templates currently reference the changed requirement, and which clients currently hold the *current* version of one of those templates — the blast radius, nothing more. A client on an unrelated template, or already on a superseded version, is out of scope and untouched.
+3. **AMEND** ([`amendTemplate`](src/compliance/amend.ts)) makes one `chat` call scoped to the single affected clause — the model sees only that clause's current text and the requirement's new obligation, and returns only the replacement clause. Everything else in the template carries over byte-for-byte; the new version registers under the same content-hash identity described above.
+4. **NOTIFY** ([`buildAmendmentNotice`](src/compliance/amend.ts)) issues one notice per affected client: previous clause text, new clause text, the citation, and — as prominently as the change itself — a "what did not change" list, because an officer scanning this needs the scope of a change as much as its content.
+5. **RECORD** writes the new template version and each affected client's new (unconsented) issuance to `state/versions.json`, and the new requirements snapshot to `state/requirements-snapshot.json`.
+
+`--amend` also runs a real full regeneration of the same affected clients under a second ledger, purely to print genuine side-by-side ops numbers rather than an estimate — see [Operation economics](#operation-economics).
+
+### UI console
+
+[`ui/`](ui/) is a small React/Vite console over the CLI's own output — five tabs (Coverage, Clients, Packs, Amendments, Run) reading `state/*.json`, `config/` and `out/` as static JSON (`npm run sync` in `ui/`, wired as `predev`/`prebuild`). It recomputes nothing: the coverage grid, the consent states, the pack manifests and the ops ledger are exactly what the CLI already wrote to disk. See [`ui/README.md`](ui/README.md) — a screenshot of the coverage grid is below.
+
+### All data is invented
+
+Meridian Advisory Services, its advisers, its eight clients, every date, every fee figure and every note in [`corpus/ria-compliance/`](corpus/ria-compliance/) are fictional — see [`corpus/MANIFEST.md`](corpus/MANIFEST.md) for exactly what was planted and why. The seven SEBI requirements in [`config/requirements.yaml`](config/requirements.yaml) (and their revision in [`config/requirements-v2.yaml`](config/requirements-v2.yaml)) are real regulation, citation-checked against actual SEBI (Investment Advisers) Regulations, 2013 provisions — fabricating the regulation would make the whole exercise meaningless. Nothing here is legal advice, and no certification is claimed anywhere in the tool or this document.
 
 ### The requirements and client registers are config, not code
 
@@ -128,7 +173,7 @@ That exposes the same ~50 REST endpoints as MCP tools (chat, documents, sessions
 ```
 src/
 ├── index.ts        CLI entry, arg parsing, run orchestration
-├── compliance.ts    compliance CLI: --list-requirements / --list-clients / --coverage / --generate
+├── compliance.ts    compliance CLI: list/coverage/generate/registry-seed/matrix/amend
 ├── config.ts         endpoints, limits, tunables
 ├── types.ts            API response/request shapes
 ├── logger.ts             structured run log (console + run-log.json)
@@ -145,16 +190,25 @@ src/
 │   ├── requirements.ts                     load + validate config/requirements.yaml
 │   └── clients.ts                            load + validate config/clients.yaml
 └── compliance/
-    ├── plan.ts                                 draft per-client pack outline (1 chat call)
-    ├── coverage.ts                               EVIDENCED/STALE/MISSING/INCONSISTENT engine
-    ├── generate.ts                                 batched per-client pack drafting + polling
-    └── verify.ts                                     free structure + citation check
+    ├── plan.ts            draft per-client pack outline (1 chat call) + defensive JSON parsing
+    ├── coverage.ts          EVIDENCED/STALE/MISSING/INCONSISTENT engine
+    ├── generate.ts            batched per-client pack drafting + polling + export
+    ├── verify.ts                free structure + citation check
+    ├── registry.ts                content-hashed template versions + evidence-gated consent
+    ├── report.ts                    client × template consent matrix
+    ├── amend.ts                       DETECT → SCOPE → AMEND → NOTIFY → RECORD
+    └── artifacts.ts                     persists coverage/pack/ledger snapshots to state/*.json
 
 config/
-├── requirements.yaml   SEBI (Investment Advisers) Regulations, 2013 obligations — real regulation
-└── clients.yaml          invented advisory client roster
+├── requirements.yaml     SEBI (Investment Advisers) Regulations, 2013 obligations — real regulation
+├── requirements-v2.yaml    a further tightening of RIA-AI-01 — the amendment demo's "new" register
+├── clients.yaml             invented advisory client roster
+└── templates/                 the two hand-authored advisory-agreement template versions
 
+state/                (append-only run artifacts — versions, consent, coverage, packs, ledger, amendments)
 corpus/
 ├── MANIFEST.md         documents all five deliberately planted coverage gaps
 └── ria-compliance/       Meridian Advisory Services' fictional compliance notes
+
+ui/                  React/Vite console reading state/*.json, config/ and out/ — see ui/README.md
 ```
