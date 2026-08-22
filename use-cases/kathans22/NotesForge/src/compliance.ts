@@ -4,11 +4,20 @@ import { fileURLToPath } from "node:url";
 import { OpsLedger } from "./budget.js";
 import { SuperDocsClient } from "./client.js";
 import { CONFIG } from "./config.js";
+import {
+  applyAmendment,
+  detectAmendments,
+  formatAmendmentNotice,
+  loadRequirementsSnapshot,
+  saveRequirementsSnapshot,
+  scopeAmendment,
+} from "./compliance/amend.js";
 import { assessCoverage, blockForClient, findInBlock, formatCoverageReport } from "./compliance/coverage.js";
 import { buildPlannedSections, generateCompliancePack } from "./compliance/generate.js";
 import { planCompliancePacks } from "./compliance/plan.js";
 import {
   clientsBehind,
+  currentVersion,
   DEFAULT_VERSION_STORE_PATH,
   loadVersionStore,
   recordConsent,
@@ -223,6 +232,132 @@ async function runMatrix(): Promise<void> {
   console.log(`\n[INFO] matrix written to ${DEFAULT_CONSENT_MATRIX_PATH}`);
 }
 
+function nextVersionLabel(current: string): string {
+  const m = current.match(/^v(\d+)$/);
+  return m ? `v${Number(m[1]) + 1}` : `${current}-amended`;
+}
+
+/**
+ * Runs the full amendment pipeline: DETECT (against state's requirements
+ * snapshot, bootstrapped from config/requirements.yaml if this is the
+ * first run) -> SCOPE -> AMEND -> NOTIFY -> RECORD. Also runs a real
+ * generateCompliancePack for the same affected clients under a second
+ * ledger, purely to print a genuine ops comparison — not an estimate —
+ * against what a full regeneration would have cost.
+ */
+async function runAmend(args: string[]): Promise<void> {
+  const newRequirementsPath = getFlagValue(args, "--new-requirements") ?? "./config/requirements-v2.yaml";
+  const effectiveFrom = getFlagValue(args, "--effective-from") ?? new Date().toISOString().slice(0, 10);
+  const opsCapArg = getFlagValue(args, "--ops-cap");
+  const opsCap = opsCapArg ? Number(opsCapArg) : CONFIG.OPS_CAP;
+  const skipRegenComparison = args.includes("--no-regen-comparison");
+
+  const logger = new Logger();
+  const creds = await resolveCredentials(logger);
+  const amendLedger = new OpsLedger(logger, opsCap);
+  const client = new SuperDocsClient(creds.api_key, logger, amendLedger);
+
+  logger.step("DETECT — comparing against the requirements snapshot recorded in state");
+  let baseline = await loadRequirementsSnapshot();
+  if (baseline === null) {
+    baseline = await loadRequirements();
+    console.log("[INFO] no requirements snapshot on file yet — bootstrapping it from config/requirements.yaml");
+  }
+  const updatedRequirements = await loadRequirements(newRequirementsPath);
+  const events = detectAmendments(baseline, updatedRequirements);
+
+  if (events.length === 0) {
+    console.log("[OK] no amendment detected — the requirements register is unchanged since the last recorded snapshot");
+    return;
+  }
+  console.log(`[INFO] ${events.length} amendment event(s) detected:`);
+  for (const e of events) console.log(`  - ${e.requirement_id} (${e.kind})`);
+
+  const store = await loadVersionStore();
+  const clients = await loadClients();
+
+  const noticesDir = path.join(fileURLToPath(new URL("../state/amendments", import.meta.url)));
+  let totalNotices = 0;
+  let allAffectedClientIds: string[] = [];
+
+  for (const event of events) {
+    logger.step(`SCOPE — blast radius for ${event.requirement_id}`);
+    const previewScope = scopeAmendment(store, event);
+    console.log(
+      `[INFO] affected template(s): ${previewScope.affected_template_ids.join(", ") || "(none)"}; affected client(s): ${previewScope.affected_client_ids.join(", ") || "(none)"}`,
+    );
+    if (previewScope.affected_template_ids.length === 0) {
+      console.log(`[INFO] no template currently references ${event.requirement_id} — nothing to amend`);
+      continue;
+    }
+
+    const currentLabel = currentVersion(store, previewScope.affected_template_ids[0]!)!.version;
+
+    logger.step(`AMEND + NOTIFY + RECORD — ${event.requirement_id}`);
+    const result = await applyAmendment(
+      client,
+      amendLedger,
+      store,
+      clients,
+      event,
+      effectiveFrom,
+      nextVersionLabel(currentLabel),
+    );
+
+    const eventDir = path.join(noticesDir, `${event.requirement_id}-${effectiveFrom}`);
+    await mkdir(eventDir, { recursive: true });
+    for (const notice of result.notices) {
+      await writeFile(
+        path.join(eventDir, `${notice.client_id}-notice.md`),
+        formatAmendmentNotice(notice),
+        "utf8",
+      );
+    }
+    console.log(`[OK] ${result.notices.length} notice(s) written to ${eventDir}`);
+
+    totalNotices += result.notices.length;
+    allAffectedClientIds = allAffectedClientIds.concat(result.notices.map((n) => n.client_id));
+  }
+
+  await saveVersionStore(store);
+  await saveRequirementsSnapshot(updatedRequirements);
+  console.log(`[OK] state/versions.json and state/requirements-snapshot.json updated`);
+
+  console.log(`\n${amendLedger.report()}\n`);
+  console.log(`amendment ops charged: ${amendLedger.spent}`);
+
+  if (!skipRegenComparison && allAffectedClientIds.length > 0) {
+    logger.step("comparing against a real full regeneration of the same affected clients");
+    const regenLedger = new OpsLedger(logger, opsCap);
+    const regenClient = new SuperDocsClient(creds.api_key, logger, regenLedger);
+    const requirements = await loadRequirements();
+    const notes = await readNotes("./corpus/ria-compliance");
+    const digest = summariseNotes(notes);
+    const { outlines } = await planCompliancePacks(regenClient, regenLedger, requirements, clients, digest);
+    const coverageEntries = await assessCoverage(regenClient, regenLedger, requirements, clients, notes);
+
+    for (const clientId of allAffectedClientIds) {
+      const c = clients.find((cl) => cl.id === clientId)!;
+      const outline = outlines.find((o) => o.client_id === clientId);
+      if (!outline) continue;
+      const plannedSections = buildPlannedSections(outline, coverageEntries, requirements);
+      await generateCompliancePack(regenClient, regenLedger, c, outline, plannedSections);
+    }
+
+    console.log(`\nfull-regeneration ops for the same ${allAffectedClientIds.length} client(s): ${regenLedger.spent}`);
+    console.log(`\n=== ops comparison ===`);
+    console.log(`amendment:         ${amendLedger.spent}`);
+    console.log(`full regeneration: ${regenLedger.spent}`);
+    console.log(
+      amendLedger.spent < regenLedger.spent
+        ? `[OK] amendment is cheaper by ${regenLedger.spent - amendLedger.spent} op(s)`
+        : `[WARN] amendment was not cheaper than full regeneration this run`,
+    );
+  }
+
+  await logger.flush("compliance-amend-log.json");
+}
+
 export async function runComplianceCli(args: string[]): Promise<void> {
   if (args.includes("--list-requirements")) {
     await listRequirements();
@@ -254,8 +389,13 @@ export async function runComplianceCli(args: string[]): Promise<void> {
     return;
   }
 
+  if (args.includes("--amend")) {
+    await runAmend(args);
+    return;
+  }
+
   console.log(
-    "compliance: no recognised command. Try --list-requirements, --list-clients, --coverage, --generate, --registry-seed or --matrix.",
+    "compliance: no recognised command. Try --list-requirements, --list-clients, --coverage, --generate, --registry-seed, --matrix or --amend.",
   );
   process.exitCode = 1;
 }

@@ -19,6 +19,17 @@
         "RIA-AI-01"
       ],
       "content_hash": "f9550577c77d806b95632f64edb7fbb2116b2deeb371b90d15a97b89a7f855ef",
+      "superseded_by": "v3"
+    },
+    {
+      "template_id": "ria-advisory-agreement",
+      "version": "v3",
+      "effective_from": "2026-08-22",
+      "requirement_ids": [
+        "RIA-AGR-01",
+        "RIA-AI-01"
+      ],
+      "content_hash": "13ff28c301875eefd337d50135614ae66de67e4420e15b2b815a3590a408d661",
       "superseded_by": null
     }
   ],
@@ -86,6 +97,38 @@
       "issued_on": "2025-08-01",
       "consented_on": "2025-08-01",
       "consent_evidence": "client-onboarding-notes.md:55"
+    },
+    {
+      "client_id": "CL-02",
+      "template_id": "ria-advisory-agreement",
+      "version": "v3",
+      "issued_on": "2026-08-22",
+      "consented_on": null,
+      "consent_evidence": null
+    },
+    {
+      "client_id": "CL-04",
+      "template_id": "ria-advisory-agreement",
+      "version": "v3",
+      "issued_on": "2026-08-22",
+      "consented_on": null,
+      "consent_evidence": null
+    },
+    {
+      "client_id": "CL-06",
+      "template_id": "ria-advisory-agreement",
+      "version": "v3",
+      "issued_on": "2026-08-22",
+      "consented_on": null,
+      "consent_evidence": null
+    },
+    {
+      "client_id": "CL-08",
+      "template_id": "ria-advisory-agreement",
+      "version": "v3",
+      "issued_on": "2026-08-22",
+      "consented_on": null,
+      "consent_evidence": null
     }
   ]
 }
