@@ -568,6 +568,22 @@ export async function assessCoverage(
   return entries;
 }
 
+/**
+ * Turns a coverage finding into the exact heading text a pack section is
+ * drafted and verified against — the citation lives in the heading itself
+ * so the free structure read (headings only, no body) is enough to check
+ * it. No evidence means no parenthetical: MISSING never gets a citation it
+ * didn't earn.
+ */
+export function canonicalSectionHeading(requirementTitle: string, entry: CoverageEntry): string {
+  const label = entry.status.charAt(0) + entry.status.slice(1).toLowerCase();
+  if (entry.evidence.length === 0) {
+    return `${requirementTitle} — ${label}`;
+  }
+  const files = Array.from(new Set(entry.evidence.map((e) => e.file)));
+  return `${requirementTitle} — ${label} (${files.join(", ")})`;
+}
+
 export function formatCoverageReport(
   entries: CoverageEntry[],
   clients: Client[],
