@@ -34,7 +34,7 @@ clients:
     advisory_type: individual
     ai_assisted: true
     agreement_version: v2
-    risk_profile_reviewed_on: "2025-01-18"
+    risk_profile_reviewed_on: "2026-06-20"
 
   - id: CL-05
     name: "Rohan Textiles Pvt Ltd"
