@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Requirement } from "../domain/requirements.js";
+import { currentVersion, latestClientVersion, type VersionStore } from "./registry.js";
 
 export const DEFAULT_REQUIREMENTS_SNAPSHOT_PATH = fileURLToPath(
   new URL("../../state/requirements-snapshot.json", import.meta.url),
@@ -73,4 +74,47 @@ export function detectAmendments(baseline: Requirement[], updated: Requirement[]
   }
 
   return events;
+}
+
+export interface AmendmentScope {
+  event: AmendmentEvent;
+  affected_template_ids: string[];
+  affected_client_ids: string[];
+}
+
+/**
+ * The blast radius: which templates currently reference the changed
+ * requirement, and which clients currently hold the current version of
+ * one of those templates. Nothing outside this set is touched by the rest
+ * of the pipeline — a client on an unrelated template, or on a superseded
+ * version of an affected template, is not in scope.
+ */
+export function scopeAmendment(store: VersionStore, event: AmendmentEvent): AmendmentScope {
+  const affectedTemplateIds = Array.from(
+    new Set(
+      store.template_versions
+        .filter((t) => t.superseded_by === null && t.requirement_ids.includes(event.requirement_id))
+        .map((t) => t.template_id),
+    ),
+  ).sort();
+
+  const affectedClientIds = new Set<string>();
+  for (const templateId of affectedTemplateIds) {
+    const current = currentVersion(store, templateId);
+    if (!current) continue;
+
+    const holderIds = new Set(
+      store.client_versions.filter((r) => r.template_id === templateId).map((r) => r.client_id),
+    );
+    for (const clientId of holderIds) {
+      const latest = latestClientVersion(store, clientId, templateId);
+      if (latest?.version === current.version) affectedClientIds.add(clientId);
+    }
+  }
+
+  return {
+    event,
+    affected_template_ids: affectedTemplateIds,
+    affected_client_ids: Array.from(affectedClientIds).sort(),
+  };
 }

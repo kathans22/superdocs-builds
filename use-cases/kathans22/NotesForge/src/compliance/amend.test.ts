@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Requirement } from "../domain/requirements.js";
-import { detectAmendments } from "./amend.js";
+import { recordIssue, registerTemplateVersion, type VersionStore } from "./registry.js";
+import { detectAmendments, scopeAmendment } from "./amend.js";
 
 function req(overrides: Partial<Requirement> = {}): Requirement {
   return {
@@ -62,4 +63,54 @@ test("detectAmendments: an empty baseline (first ever run) treats every requirem
   const events = detectAmendments([], updated);
   assert.equal(events.length, 2);
   assert.ok(events.every((e) => e.kind === "new_requirement"));
+});
+
+function seededStore(): VersionStore {
+  // Mirrors the real corpus shape: v1 (agreement-only) is superseded by v2
+  // (agreement + AI clause); non-AI clients stayed on v1, AI-assisted
+  // clients are on v2.
+  const store: VersionStore = { template_versions: [], client_versions: [] };
+  registerTemplateVersion(store, "ria-advisory-agreement", "v1", "2015-04-01", ["RIA-AGR-01"], "v1 content");
+  registerTemplateVersion(
+    store,
+    "ria-advisory-agreement",
+    "v2",
+    "2023-01-01",
+    ["RIA-AGR-01", "RIA-AI-01"],
+    "v2 content",
+  );
+  recordIssue(store, "CL-01", "ria-advisory-agreement", "v1", "2021-03-10"); // non-AI
+  recordIssue(store, "CL-02", "ria-advisory-agreement", "v2", "2023-06-15"); // AI-assisted
+  recordIssue(store, "CL-04", "ria-advisory-agreement", "v2", "2024-01-20"); // AI-assisted
+  return store;
+}
+
+test("scopeAmendment: only the template referencing the changed requirement, and only its current holders", () => {
+  const store = seededStore();
+  const event = {
+    requirement_id: "RIA-AI-01",
+    kind: "changed_obligation" as const,
+    previous: req(),
+    updated: req({ obligation: "Extended." }),
+  };
+
+  const scope = scopeAmendment(store, event);
+
+  assert.deepEqual(scope.affected_template_ids, ["ria-advisory-agreement"]);
+  // CL-01 is on v1, which doesn't reference RIA-AI-01 at all — not in scope.
+  assert.deepEqual(scope.affected_client_ids, ["CL-02", "CL-04"]);
+});
+
+test("scopeAmendment: a requirement no current template references has an empty blast radius", () => {
+  const store = seededStore();
+  const event = {
+    requirement_id: "RIA-NW-01", // firm-level, not on any client agreement template
+    kind: "changed_obligation" as const,
+    previous: req({ id: "RIA-NW-01" }),
+    updated: req({ id: "RIA-NW-01", obligation: "Extended." }),
+  };
+
+  const scope = scopeAmendment(store, event);
+  assert.deepEqual(scope.affected_template_ids, []);
+  assert.deepEqual(scope.affected_client_ids, []);
 });
