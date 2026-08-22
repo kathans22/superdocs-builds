@@ -254,6 +254,14 @@ corpus/
 ui/                  React/Vite console reading state/*.json, config/ and out/ — see ui/README.md
 ```
 
+## Security
+
+```bash
+git log -p -- use-cases/kathans22/NotesForge/ | grep -iE "sk_|SECRET|PASSWORD|API_KEY="
+```
+
+This does not return an empty result — it's checked here rather than just asserted. Every hit is one of: the documented placeholder `SUPERDOCS_API_KEY=your-key-here`, the MCP setup example's placeholder `sk_<your key>`, or the substring `sk_` inside the unrelated field name `risk_profile_reviewed_on`. No real key, token or credential is present anywhere in this project's history. `agent_credentials.json` (where a real key lands locally) is git-ignored and was never committed.
+
 ## Credit
 
 Built for the SuperDocs task, by [kathans22](https://github.com/kathans22).
