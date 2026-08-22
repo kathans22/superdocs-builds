@@ -1,0 +1,51 @@
+{
+  "generated_at": "2026-08-22T15:48:23.072Z",
+  "packs": [
+    {
+      "client_id": "CL-04",
+      "client_name": "Kunal Sharma",
+      "title": "SEBI Compliance Pack: Kunal Sharma",
+      "documentId": "doc_primary",
+      "durableDocumentId": "899ae062-d555-4b24-b4d5-499f09683f5c",
+      "sessionId": "notesforge-compliance-pack-CL-04-1787413660431",
+      "verified": true,
+      "plannedSections": [
+        {
+          "requirement_id": "RIA-AGR-01",
+          "title": "Client agreement executed before advice",
+          "heading": "Client agreement executed before advice — Evidenced (client-onboarding-notes.md)",
+          "status": "EVIDENCED"
+        },
+        {
+          "requirement_id": "RIA-RISK-01",
+          "title": "Risk profiling completed and recorded",
+          "heading": "Risk profiling completed and recorded — Evidenced (risk-profiling-log.md)",
+          "status": "EVIDENCED"
+        },
+        {
+          "requirement_id": "RIA-SUIT-01",
+          "title": "Suitability assessment documented and linked to advice",
+          "heading": "Suitability assessment documented and linked to advice — Evidenced (suitability-notes-kunal-sharma.md)",
+          "status": "EVIDENCED"
+        },
+        {
+          "requirement_id": "RIA-FEE-01",
+          "title": "Fee disclosure current and consistent with the agreement",
+          "heading": "Fee disclosure current and consistent with the agreement — Evidenced (client-onboarding-notes.md)",
+          "status": "EVIDENCED"
+        },
+        {
+          "requirement_id": "RIA-AI-01",
+          "title": "AI-assisted advice documented and disclosed",
+          "heading": "AI-assisted advice documented and disclosed — Evidenced (ai-usage-register.md)",
+          "status": "EVIDENCED"
+        }
+      ],
+      "exportedFiles": [
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-04\\SEBI Compliance Pack Kunal Sharma.docx",
+        "C:\\Users\\hp\\Desktop\\SuperDocs_Round2\\Task_2\\Task_2.3\\superdocs-builds\\use-cases\\kathans22\\NotesForge\\out\\CL-04\\SEBI Compliance Pack Kunal Sharma.pdf"
+      ],
+      "generated_at": "2026-08-22T15:48:23.070Z"
+    }
+  ]
+}

@@ -12,6 +12,12 @@ import {
   saveRequirementsSnapshot,
   scopeAmendment,
 } from "./compliance/amend.js";
+import {
+  type PackManifestEntry,
+  writeCoverageSnapshot,
+  writeLedgerSnapshot,
+  writePacksManifest,
+} from "./compliance/artifacts.js";
 import { assessCoverage, blockForClient, findInBlock, formatCoverageReport } from "./compliance/coverage.js";
 import { buildPlannedSections, generateCompliancePack } from "./compliance/generate.js";
 import { planCompliancePacks } from "./compliance/plan.js";
@@ -31,6 +37,7 @@ import { resolveCredentials } from "./credentials.js";
 import type { Client } from "./domain/clients.js";
 import { loadClients } from "./domain/clients.js";
 import { loadRequirements } from "./domain/requirements.js";
+import { type ExportFormat, exportReport } from "./export.js";
 import { Logger } from "./logger.js";
 import { readNotes, summariseNotes } from "./notes.js";
 
@@ -99,6 +106,8 @@ async function runCoverage(args: string[]): Promise<void> {
   console.log(`total ops charged: ${ledger.spent}`);
   console.log(`monthly remaining: ${ledger.remaining ?? "?"}`);
 
+  await writeCoverageSnapshot(entries, notesDir);
+  await writeLedgerSnapshot("coverage", ledger, opsCap);
   await logger.flush("compliance-coverage-log.json");
 }
 
@@ -110,6 +119,11 @@ async function runGenerate(args: string[]): Promise<void> {
   const today = todayArg ? new Date(todayArg) : new Date();
   const clientsArg = getFlagValue(args, "--clients");
   const selectedIds = clientsArg ? new Set(clientsArg.split(",").map((s) => s.trim())) : null;
+  const outDir = getFlagValue(args, "--out") ?? "./out";
+  const formats = (getFlagValue(args, "--formats") ?? "docx,pdf")
+    .split(",")
+    .map((f) => f.trim()) as ExportFormat[];
+  const skipExport = args.includes("--no-export");
 
   const logger = new Logger();
   const creds = await resolveCredentials(logger);
@@ -135,6 +149,8 @@ async function runGenerate(args: string[]): Promise<void> {
   logger.step("assessing coverage");
   const coverageEntries = await assessCoverage(client, ledger, requirements, allClients, notes, today);
 
+  const packManifest: PackManifestEntry[] = [];
+
   for (const c of clients) {
     const outline = outlines.find((o) => o.client_id === c.id);
     if (!outline) {
@@ -148,21 +164,52 @@ async function runGenerate(args: string[]): Promise<void> {
     const draft = await generateCompliancePack(client, ledger, c, outline, plannedSections);
     console.log(`[OK] pack drafted: ${draft.durableDocumentId ?? draft.documentId}`);
 
+    let verified = false;
     if (draft.durableDocumentId) {
       logger.step(`verifying pack for ${c.id}`);
       const result = await verifyCompliancePack(client, draft.durableDocumentId, plannedSections);
+      verified = result.ok;
       if (!result.ok) {
         console.warn(`[WARN] ${c.id}: verification failed — see warnings above`);
       }
     } else {
       console.warn(`[WARN] ${c.id}: no durable document id — skipping verification`);
     }
+
+    // requestDownloadUrl is a free read (0 ops) — exporting the pack costs
+    // nothing against the run's budget, so it happens by default.
+    let exportedFiles: string[] = [];
+    if (!skipExport) {
+      logger.step(`exporting pack for ${c.id}`);
+      try {
+        exportedFiles = await exportReport(client, draft.sessionId, formats, path.join(outDir, c.id));
+      } catch (err) {
+        console.warn(
+          `[WARN] ${c.id}: export failed — ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    packManifest.push({
+      client_id: c.id,
+      client_name: c.name,
+      title: draft.title,
+      documentId: draft.documentId,
+      durableDocumentId: draft.durableDocumentId,
+      sessionId: draft.sessionId,
+      verified,
+      plannedSections,
+      exportedFiles,
+      generated_at: new Date().toISOString(),
+    });
   }
 
   console.log(`\n${ledger.report()}\n`);
   console.log(`total ops charged: ${ledger.spent}`);
   console.log(`monthly remaining: ${ledger.remaining ?? "?"}`);
 
+  await writePacksManifest(packManifest);
+  await writeLedgerSnapshot("generate", ledger, opsCap);
   await logger.flush("compliance-generate-log.json");
 }
 
@@ -313,6 +360,24 @@ async function runAmend(args: string[]): Promise<void> {
         "utf8",
       );
     }
+    // The .md notice is the human-readable artifact; this structured
+    // sibling is so a reader (e.g. the UI) doesn't have to parse markdown
+    // back into the AmendmentNotice fields it was built from.
+    await writeFile(
+      path.join(eventDir, "event.json"),
+      `${JSON.stringify(
+        {
+          requirement_id: event.requirement_id,
+          kind: event.kind,
+          effective_from: effectiveFrom,
+          scope: result.scope,
+          notices: result.notices,
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
     console.log(`[OK] ${result.notices.length} notice(s) written to ${eventDir}`);
 
     totalNotices += result.notices.length;
@@ -355,6 +420,7 @@ async function runAmend(args: string[]): Promise<void> {
     );
   }
 
+  await writeLedgerSnapshot("amend", amendLedger, opsCap);
   await logger.flush("compliance-amend-log.json");
 }
 

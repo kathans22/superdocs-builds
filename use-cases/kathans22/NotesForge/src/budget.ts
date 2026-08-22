@@ -63,6 +63,11 @@ export class OpsLedger {
     return this.lastRemaining;
   }
 
+  /** The rows this ledger has recorded so far — read-only, for persisting a run snapshot. */
+  get snapshot(): readonly LedgerRow[] {
+    return this.rows;
+  }
+
   assertCanSpend(estimate: number): void {
     if (this.totalSpent + estimate > this.opsCap) {
       throw new BudgetExceededError(

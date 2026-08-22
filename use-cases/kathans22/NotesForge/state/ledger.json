@@ -1,0 +1,135 @@
+{
+  "command": "generate",
+  "generated_at": "2026-08-22T15:48:23.079Z",
+  "ops_cap": 25,
+  "total_spent": 1,
+  "remaining": 468,
+  "rows": [
+    {
+      "label": "chat",
+      "opsCharged": 0,
+      "runningTotal": 0,
+      "monthlyRemaining": 469
+    },
+    {
+      "label": "chat",
+      "opsCharged": 0,
+      "runningTotal": 0,
+      "monthlyRemaining": 469
+    },
+    {
+      "label": "chatAsync",
+      "opsCharged": 0,
+      "runningTotal": 0,
+      "monthlyRemaining": 469
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 0,
+      "monthlyRemaining": 469
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 0,
+      "monthlyRemaining": 469
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 0,
+      "monthlyRemaining": 469
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 0,
+      "monthlyRemaining": 469
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 0,
+      "monthlyRemaining": 469
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 0,
+      "monthlyRemaining": 469
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 0,
+      "monthlyRemaining": 469
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 0,
+      "monthlyRemaining": 469
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 0,
+      "monthlyRemaining": 469
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 0,
+      "monthlyRemaining": 469
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 0,
+      "monthlyRemaining": 469
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 0,
+      "monthlyRemaining": 469
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 0,
+      "runningTotal": 0,
+      "monthlyRemaining": 469
+    },
+    {
+      "label": "getJob",
+      "opsCharged": 1,
+      "runningTotal": 1,
+      "monthlyRemaining": 468
+    },
+    {
+      "label": "listSessionDocuments",
+      "opsCharged": 0,
+      "runningTotal": 1,
+      "monthlyRemaining": 468
+    },
+    {
+      "label": "getDocument",
+      "opsCharged": 0,
+      "runningTotal": 1,
+      "monthlyRemaining": 468
+    },
+    {
+      "label": "requestDownloadUrl",
+      "opsCharged": 0,
+      "runningTotal": 1,
+      "monthlyRemaining": 468
+    },
+    {
+      "label": "requestDownloadUrl",
+      "opsCharged": 0,
+      "runningTotal": 1,
+      "monthlyRemaining": 468
+    }
+  ]
+}
