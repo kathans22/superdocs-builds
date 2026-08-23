@@ -4,6 +4,10 @@ A zero-dependency Node 20+/TypeScript CLI agent that turns a folder of rough not
 
 This build also carries a specialisation on top of the same engine — **[RIA Compliance Packs](#ria-compliance-packs)** — that turns SEBI compliance notes into per-client compliance packs with an honest, evidence-based coverage report. See that section for what it adds and the one rule it never breaks.
 
+## Demo video
+
+[Watch the RIA Compliance Packs walkthrough](https://youtu.be/QsYSujMmOEo) — the coverage grid, the client roster, real generated packs, the amendment flow, and the ops receipt, all run live against the seeded corpus.
+
 ## Quickstart
 
 ```bash
