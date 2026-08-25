@@ -198,6 +198,10 @@ Bug evidence written during this build (submission-form rollup). Full write-ups 
 | [BUG-001](evidence/bugs/BUG-001-placeholder-leftovers.md) | Batched section fill left `PLACEHOLDER_*` tokens / duplicate talking-point blocks after “successful” chats | Workable — first-pass quality uneven; weak landed-check falsely passed until tightened | Fail landed-check if placeholders remain; split-retry failed sections alone; keep batch cap 2 |
 | [BUG-002](evidence/bugs/BUG-002-image-insert-extra-sections.md) | Image-insert chat appended extra generic `## Section N` blocks and `placeholder.com` figures alongside real images | Partial — scorer still found real §6/§8 headings, but the speaking script was dirty | Strip the extra sections and stub images from the export; mirror real figures under `evidence/narratives/presenter-visuals/` |
 
+## Credit
+
+Built for the SuperDocs task, by [kathans22](https://github.com/kathans22).
+
 ## License
 
 MIT — see [`LICENSE`](LICENSE). Compatible with the parent [superdocs-builds](https://github.com/superdocsapp/superdocs-builds) MIT license ([CONTRIBUTING.md](../../../CONTRIBUTING.md)). Secrets stay out of the tree (`.env.example` uses placeholders only).
