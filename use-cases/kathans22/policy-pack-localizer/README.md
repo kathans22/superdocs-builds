@@ -446,7 +446,7 @@ would not hold as-built:
 
 ## Credit
 
-Built by Kathan Shah (`kathans22`) for the SuperDocs Round 2 hiring task.
+Built for the SuperDocs task, by [kathans22](https://github.com/kathans22).
 
 ## License
 
